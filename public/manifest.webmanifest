@@ -1,0 +1,14 @@
+{
+  "name": "The Drift — Time Allocation",
+  "short_name": "The Drift",
+  "description": "See the gap between what matters and where your time goes.",
+  "start_url": "/?screen=log",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#F2F0E9",
+  "theme_color": "#F2F0E9",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

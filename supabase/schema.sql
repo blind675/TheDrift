@@ -1,0 +1,22 @@
+-- The Drift — initial Supabase schema. Run once in a fresh project.
+create extension if not exists "pgcrypto";
+create table categories (id uuid primary key default gen_random_uuid(), user_id uuid not null references auth.users(id) on delete cascade, name text not null, color text not null, in_pie boolean not null default true, sort_order int not null, info_examples text, info_counter text, info_edge text, archived boolean not null default false, created_at timestamptz not null default now());
+create index on categories (user_id) where not archived;
+create table entries (id uuid primary key default gen_random_uuid(), user_id uuid not null references auth.users(id) on delete cascade, label text, started_at timestamptz not null, ended_at timestamptz not null, note text, source text not null default 'manual' check (source in ('timer','manual','template')), created_at timestamptz not null default now(), updated_at timestamptz not null default now(), constraint entry_positive check (ended_at > started_at), constraint entry_sane_length check (ended_at - started_at <= interval '16 hours'));
+create index on entries (user_id, started_at desc);
+create table entry_allocations (entry_id uuid not null references entries(id) on delete cascade, category_id uuid not null references categories(id), weight numeric(3,2) not null check (weight > 0 and weight <= 1), primary key (entry_id, category_id));
+create index on entry_allocations (category_id);
+create or replace function check_allocation_invariants() returns trigger language plpgsql as $$ declare n int; total numeric; eid uuid := coalesce(new.entry_id, old.entry_id); begin select count(*), coalesce(sum(weight),0) into n,total from entry_allocations where entry_id=eid; if n=0 then return null; end if; if n>2 then raise exception 'An entry may have at most two categories (got %)',n; end if; if abs(total-1.0)>0.001 then raise exception 'Allocation weights must sum to 1.0 (got %)',total; end if; return null; end $$;
+create constraint trigger allocation_invariants after insert or update or delete on entry_allocations deferrable initially deferred for each row execute function check_allocation_invariants();
+create table intent_versions (id uuid primary key default gen_random_uuid(), user_id uuid not null references auth.users(id) on delete cascade, effective_from timestamptz not null default now(), steepness numeric(2,1) not null default 1.0 check (steepness>=0 and steepness<=2), note text);
+create index on intent_versions (user_id, effective_from desc);
+create table intent_ranks (intent_id uuid not null references intent_versions(id) on delete cascade, category_id uuid not null references categories(id), rank int not null check (rank>0), primary key (intent_id,category_id), constraint one_category_per_rank unique (intent_id,rank) deferrable initially deferred);
+create table running_timer (user_id uuid primary key references auth.users(id) on delete cascade, label text, started_at timestamptz not null, draft jsonb);
+alter table categories enable row level security; alter table entries enable row level security; alter table entry_allocations enable row level security; alter table intent_versions enable row level security; alter table intent_ranks enable row level security; alter table running_timer enable row level security;
+create policy own_categories on categories for all using (auth.uid()=user_id) with check (auth.uid()=user_id);
+create policy own_entries on entries for all using (auth.uid()=user_id) with check (auth.uid()=user_id);
+create policy own_intents on intent_versions for all using (auth.uid()=user_id) with check (auth.uid()=user_id);
+create policy own_timer on running_timer for all using (auth.uid()=user_id) with check (auth.uid()=user_id);
+create policy own_allocations on entry_allocations for all using (exists(select 1 from entries e where e.id=entry_id and e.user_id=auth.uid()));
+create policy own_ranks on intent_ranks for all using (exists(select 1 from intent_versions v where v.id=intent_id and v.user_id=auth.uid()));
+create view weighted_minutes with (security_invoker=true) as select e.user_id,a.category_id,date_trunc('day',e.started_at) as day,sum(extract(epoch from (e.ended_at-e.started_at))/60*a.weight) as minutes from entries e join entry_allocations a on a.entry_id=e.id group by 1,2,3;
