@@ -126,6 +126,18 @@ export async function createEntry(userId: string, entry: DriftEntry, source: "ma
   return { ...entry, id: data.id };
 }
 
+export async function deleteEntry(userId: string, entryId: string): Promise<void> {
+  const { data, error } = await getSupabase()
+    .from("entries")
+    .delete()
+    .eq("id", entryId)
+    .eq("user_id", userId)
+    .select("id")
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error("The record could not be found or you do not have permission to delete it.");
+}
+
 export async function saveRunningTimer(userId: string, timer: DriftTimer): Promise<void> {
   const { error } = await getSupabase().from("running_timer").upsert({
     user_id: userId,

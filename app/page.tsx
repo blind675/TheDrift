@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { deriveTargetShares } from "../lib/compute";
-import { clearRunningTimer, createEntry, loadDriftData, requestMagicLink, saveIntent, saveRunningTimer, signOut, subscribeToAuth, type AuthSession, type DriftEntry, type DriftTimer } from "../lib/supabase";
+import { clearRunningTimer, createEntry, deleteEntry, loadDriftData, requestMagicLink, saveIntent, saveRunningTimer, signOut, subscribeToAuth, type AuthSession, type DriftEntry, type DriftTimer } from "../lib/supabase";
 
 type Tab = "log" | "intent" | "drift";
 type Category = { id: string; name: string; color: string; inPie: boolean };
@@ -90,6 +90,7 @@ export default function Home() {
   const move = (index: number, direction: -1 | 1) => { const next = [...categories]; const target = index + direction; if (target < 0 || target >= inPie.length) return; const a = next.findIndex(c => c.id === inPie[index].id), b = next.findIndex(c => c.id === inPie[target].id); [next[a], next[b]] = [next[b], next[a]]; setCategories(next); void persistIntent(next, steepness); };
   const updateSteepness = (value: number) => { setSteepness(value); void persistIntent(categories, value); };
   const addEntry = async (entry: Entry) => { try { const saved = userId ? await createEntry(userId, entry) : entry; setEntries([saved, ...entries]); setShowForm(false); setSyncState(userId ? "synced" : "local"); setToast(userId ? "Saved to Supabase" : "Saved on this device"); } catch (error) { setSyncState("error"); setToast(error instanceof Error ? error.message : "Entry could not be saved"); } setTimeout(() => setToast(""), 2600); };
+  const removeEntry = async (entry: Entry) => { if (!window.confirm(`Delete “${entry.label}”? This cannot be undone.`)) return; try { if (userId) await deleteEntry(userId, entry.id); setEntries(current => current.filter(item => item.id !== entry.id)); setSyncState(userId ? "synced" : "local"); setToast("Record deleted"); } catch (error) { setSyncState("error"); setToast(error instanceof Error ? error.message : "Record could not be deleted"); } setTimeout(() => setToast(""), 2600); };
 
   return (
     <main className="app-shell">
@@ -98,7 +99,7 @@ export default function Home() {
         <div className="top-actions"><span className={`sync ${!online || syncState === "error" ? "offline" : ""}`}><i />{!online ? "Offline" : syncState === "loading" ? "Syncing…" : syncState === "error" ? "Sync issue" : syncState === "synced" ? "Synced" : "Local only"}</span><button className="icon-button" onClick={() => setShowSettings(true)} aria-label="Open settings">•••</button></div>
       </header>
 
-      {tab === "log" && <LogScreen {...{ categories, entries, timer, elapsed, showForm, setShowForm, startTimer, stopTimer, addEntry, category }} />}
+      {tab === "log" && <LogScreen {...{ categories, entries, timer, elapsed, showForm, setShowForm, startTimer, stopTimer, addEntry, removeEntry, category }} />}
       {tab === "intent" && <IntentScreen {...{ inPie, shares, steepness, setSteepness: updateSteepness, move }} />}
       {tab === "drift" && <DriftScreen {...{ categories, entries, shares, windowDays, setWindowDays, category }} />}
 
@@ -112,7 +113,8 @@ export default function Home() {
   );
 }
 
-function LogScreen({ categories, entries, timer, elapsed, showForm, setShowForm, startTimer, stopTimer, addEntry, category }: any) {
+function LogScreen({ categories, entries, timer, elapsed, showForm, setShowForm, startTimer, stopTimer, addEntry, removeEntry, category }: any) {
+  const [openMenu, setOpenMenu] = useState<string | null>(null);
   const recent = [
     ["Project planning", "career"], ["Walk outside", "physical"], ["Reading", "growth"], ["Call family", "family"], ["Dinner together", "romance"],
   ];
@@ -128,7 +130,7 @@ function LogScreen({ categories, entries, timer, elapsed, showForm, setShowForm,
     <button className="add-block" onClick={() => setShowForm(!showForm)}><span>＋</span><span><strong>Add a finished block</strong><small>Log something that already happened</small></span><b>{showForm ? "−" : "+"}</b></button>
     {showForm && <EntryForm categories={categories} onAdd={addEntry} />}
     <div className="entries-head"><h2>Recent log</h2><button>View all</button></div>
-    {Object.entries(grouped).map(([day, dayEntries]: any) => <div className="day" key={day}><div className="day-head"><h3>{day}</h3><span>{fmtDuration(dayEntries.reduce((n: number, e: Entry) => n + minutes(e), 0))} logged</span></div>{dayEntries.map((e: Entry) => <article className="entry" key={e.id}><div className="entry-line" style={{ background: category(e.category)?.color }} /><div className="entry-main"><strong>{e.label}</strong><span>{new Date(e.start).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Bucharest" })}–{new Date(e.end).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Bucharest" })} · {fmtDuration(minutes(e))}</span></div><div className="entry-tags"><span><Dot category={category(e.category)} small />{category(e.category)?.name}</span>{e.category2 && <span><Dot category={category(e.category2)} small />{category(e.category2)?.name}</span>}</div><button aria-label={`Edit ${e.label}`}>•••</button></article>)}</div>)}
+    {Object.entries(grouped).map(([day, dayEntries]: any) => <div className="day" key={day}><div className="day-head"><h3>{day}</h3><span>{fmtDuration(dayEntries.reduce((n: number, e: Entry) => n + minutes(e), 0))} logged</span></div>{dayEntries.map((e: Entry) => <article className="entry" key={e.id}><div className="entry-line" style={{ background: category(e.category)?.color }} /><div className="entry-main"><strong>{e.label}</strong><span>{new Date(e.start).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Bucharest" })}–{new Date(e.end).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Bucharest" })} · {fmtDuration(minutes(e))}</span></div><div className="entry-tags"><span><Dot category={category(e.category)} small />{category(e.category)?.name}</span>{e.category2 && <span><Dot category={category(e.category2)} small />{category(e.category2)?.name}</span>}</div><div className="entry-actions"><button className="entry-menu-trigger" aria-label={`Actions for ${e.label}`} aria-haspopup="menu" aria-expanded={openMenu === e.id} onClick={() => setOpenMenu(openMenu === e.id ? null : e.id)}>•••</button>{openMenu === e.id && <div className="entry-menu" role="menu"><button role="menuitem" onClick={() => { setOpenMenu(null); void removeEntry(e); }}>Delete record</button></div>}</div></article>)}</div>)}
   </section>;
 }
 
