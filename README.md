@@ -26,15 +26,26 @@ When signed out, entries remain local to the device. After signing in, the app l
 Requires Node.js 22.13 or later.
 
 ```bash
-npm install
-npm run dev
+corepack pnpm install
+corepack pnpm dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000). To verify a production build:
 
 ```bash
-npm run build
+corepack pnpm build
 ```
+
+## Deploy on Vercel
+
+1. Push this repository to GitHub.
+2. In Vercel, choose **Add New → Project** and import the repository.
+3. Keep the repository root as the Root Directory. The included `vercel.json` supplies the build configuration.
+4. Add `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` under **Project Settings → Environment Variables** for Production and Preview.
+5. Deploy the project.
+6. In Supabase, open **Authentication → URL Configuration**, set **Site URL** to the production Vercel address, and add that address followed by `/**` under **Redirect URLs**.
+
+Vercel creates a new deployment whenever changes are pushed to the production branch.
 
 ## Environment variables
 
