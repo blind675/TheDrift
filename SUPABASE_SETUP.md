@@ -39,14 +39,14 @@ The seed script can be rerun safely for the same user: it skips category names t
 1. Open **Project Settings → Data API**.
 2. Copy the **Project URL**.
 3. Copy the **Publishable key**. In older projects this may be labelled the `anon` public key.
-4. Put them into a local `.env.local` file based on `.env.example`, or enter them in the app's Settings sheet after deployment.
+4. Copy `.env.example` to `.env.local` and replace the two placeholders. You can also enter the same values in the app's Settings sheet.
 
 Never put the `service_role` or secret key in this app. A browser app cannot keep a secret; Row Level Security is what protects the data.
 
 ## 6. Authentication URL settings
 
 1. Open **Authentication → URL Configuration**.
-2. While developing, set **Site URL** to `http://localhost:3000`.
+2. While developing, set **Site URL** to the local address printed by the app, currently `http://localhost:3001`.
 3. After deployment, replace it with the final HTTPS website URL.
 4. Add both the local and deployed URLs under **Redirect URLs**, each followed by `/**`.
 
@@ -63,13 +63,18 @@ order by tablename, policyname;
 
 You should see one ownership policy for each table. Do not disable RLS, even though this is a personal app.
 
-## 8. Connect and test
+## 8. Connect and test authentication
 
 1. Start the app and open **••• → Connect your data**.
-2. Enter the Project URL, publishable key, and the account email from step 3.
-3. Sign in, add a five-minute test entry, then refresh the page.
-4. In Supabase **Table Editor**, confirm one row appears in `entries` and one or two corresponding rows appear in `entry_allocations`.
-5. Turn on airplane mode, add another entry, turn connectivity back on, and confirm the app changes from **Offline** to **Synced**. This verifies the local queue.
+2. Enter only the account email from step 3; the project URL and public key are read automatically from `.env`.
+3. Press **Send magic link**, then open the email from Supabase and follow its one-time sign-in link.
+4. If Supabase rejects the redirect, add the exact local address and `/**` under **Authentication → URL Configuration → Redirect URLs**.
+
+### Important checkpoint
+
+The app completes passwordless Supabase authentication and persists the session. Once signed in, it loads categories, entries, the latest intent, and any running timer from Supabase, then writes new changes back to Supabase. The header now distinguishes local-only, syncing, synced, offline, and failed states.
+
+Cross-device reads and online writes are now supported. The remaining offline phase is a durable IndexedDB outbox with retry and conflict handling. Until that exists, keep the app online while making signed-in changes.
 
 ## 9. Install the PWA
 

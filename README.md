@@ -1,98 +1,65 @@
-# vinext-starter
+# The Drift
 
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
+The Drift is a mobile-first, installable time-allocation tracker. It records what you actually do, keeps your intended priorities as an ordering, and shows the gap without scores, streaks, or judgement.
 
-## Prerequisites
+## Start here
 
-- Node.js `>=22.13.0`
+The app can be previewed immediately with local sample data. Supabase requires a one-time project setup before it can hold your real data.
 
-## Quick Start
+1. Follow **[SUPABASE_SETUP.md](./SUPABASE_SETUP.md)** from top to bottom.
+2. Run **[`supabase/schema.sql`](./supabase/schema.sql)** once to create the tables and security policies.
+3. Create your one private account in Supabase Authentication.
+4. Put that account's UUID into **[`supabase/seed.sql`](./supabase/seed.sql)** and run it once.
+5. Copy `.env.example` to `.env.local` and add the project URL and publishable key.
+6. Start the app, open **••• → Connect your data**, enter your email, and use the magic link Supabase sends you.
+
+Important: use only the Supabase **publishable/anon key** in this web app. Never expose the `service_role` or secret key.
+
+## Current connection status
+
+The interface, local persistence, PWA manifest/service worker, database schema, seed data, Row Level Security policies, and persistent passwordless Supabase sessions are present.
+
+When signed out, entries remain local to the device. After signing in, the app loads categories, entries, the latest intent, and any running timer from Supabase. New entries, timer changes, and intent changes are written back to Supabase. A durable offline write queue is not implemented yet, so keep the app online while making signed-in changes.
+
+## Run locally
+
+Requires Node.js 22.13 or later.
 
 ```bash
 npm install
 npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000). To verify a production build:
+
+```bash
 npm run build
 ```
 
-This starter does not use `wrangler.jsonc`.
+## Environment variables
 
-## Included Shape
+Create `.env.local` (it is ignored by Git):
 
-- edit site code under `app/`
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
-
-## Workspace Auth Headers
-
-OpenAI workspace sites can read the current user's email from
-`oai-authenticated-user-email`.
-
-SIWC-authenticated workspace sites may also receive
-`oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty
-`name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by
-`oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
-
-Treat the full name as optional and fall back to email when it is absent:
-
-```tsx
-import { headers } from "next/headers";
-
-export default async function Home() {
-  const requestHeaders = await headers();
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
-
-  const displayName = fullName ?? email;
-  // ...
-}
+```dotenv
+NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_PUBLISHABLE_OR_ANON_KEY
 ```
 
-## Optional Dispatch-Owned ChatGPT Sign-In
+The app reads these values automatically. They are not requested in the Settings panel.
 
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs
-optional or required ChatGPT sign-in:
+## Project map
 
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send
-  anonymous visitors through Sign in with ChatGPT.
-- Use `chatGPTSignInPath(returnTo)` and `chatGPTSignOutPath(returnTo)` for
-  browser links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in
-  or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because
-  they depend on per-request identity headers.
+- `app/page.tsx` — Log, Intent, Drift, and connection settings UI
+- `lib/compute.ts` — pure allocation calculations
+- `lib/supabase.ts` — Supabase passwordless magic-link request
+- `public/manifest.webmanifest` and `public/sw.js` — installable/offline app shell
+- `supabase/schema.sql` — tables, constraints, view, and RLS policies
+- `supabase/seed.sql` — the eleven initial categories
+- `SUPABASE_SETUP.md` — complete dashboard walkthrough and troubleshooting
 
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the
-OAuth cookies, and identity header injection. Do not implement app routes for
-those reserved paths. Routes that do not import and call the helper remain
-anonymous-compatible.
+## Data safety
 
-SIWC establishes identity only; it does not prove workspace membership. Use the
-Sites hosting platform's access policy controls for workspace-wide restrictions,
-or enforce explicit server-side membership or allowlist checks.
-
-Use SIWC for account pages, user-specific dashboards, saved records, and write
-actions tied to the current ChatGPT user. Leave public content anonymous.
-
-## Useful Commands
-
-- `npm run dev`: start local development
-- `npm run build`: verify the vinext build output
-- `npm test`: build the starter and verify its rendered loading skeleton
-- `npm run db:generate`: generate Drizzle migrations after schema changes
-
-## Learn More
-
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+- Row Level Security is enabled on every personal-data table.
+- Every policy checks the signed-in Supabase user ID.
+- New public sign-ups should be disabled after your private user is created.
+- The app must never receive a Supabase service-role key.

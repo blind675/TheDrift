@@ -1,12 +1,12 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { deriveTargetShares } from "../lib/compute";
-import { signIn, testConnection } from "../lib/supabase";
+import { clearRunningTimer, createEntry, loadDriftData, requestMagicLink, saveIntent, saveRunningTimer, signOut, subscribeToAuth, type AuthSession, type DriftEntry, type DriftTimer } from "../lib/supabase";
 
 type Tab = "log" | "intent" | "drift";
 type Category = { id: string; name: string; color: string; inPie: boolean };
-type Entry = { id: string; label: string; start: string; end: string; category: string; category2?: string; weight: number; note?: string };
+type Entry = DriftEntry;
 
 const DEFAULT_CATEGORIES: Category[] = [
   ["career", "Career", "#D55D42", true], ["community", "Community", "#D49A38", true],
@@ -18,10 +18,10 @@ const DEFAULT_CATEGORIES: Category[] = [
 ].map(([id, name, color, inPie]) => ({ id: String(id), name: String(name), color: String(color), inPie: Boolean(inPie) }));
 
 const DEMO_ENTRIES: Entry[] = [
-  { id: "1", label: "Project planning", start: "2026-08-21T09:05", end: "2026-08-21T10:35", category: "career", weight: 1 },
-  { id: "2", label: "Lunch & walk", start: "2026-08-21T12:20", end: "2026-08-21T13:10", category: "physical", category2: "friends", weight: .8 },
-  { id: "3", label: "Reading", start: "2026-08-20T20:10", end: "2026-08-20T21:05", category: "growth", weight: 1 },
-  { id: "4", label: "Groceries", start: "2026-08-20T18:15", end: "2026-08-20T19:00", category: "maintenance", weight: 1 },
+  { id: "1", label: "Project planning", start: "2026-08-21T09:05:00+03:00", end: "2026-08-21T10:35:00+03:00", category: "career", weight: 1 },
+  { id: "2", label: "Lunch & walk", start: "2026-08-21T12:20:00+03:00", end: "2026-08-21T13:10:00+03:00", category: "physical", category2: "friends", weight: .8 },
+  { id: "3", label: "Reading", start: "2026-08-20T20:10:00+03:00", end: "2026-08-20T21:05:00+03:00", category: "growth", weight: 1 },
+  { id: "4", label: "Groceries", start: "2026-08-20T18:15:00+03:00", end: "2026-08-20T19:00:00+03:00", category: "maintenance", weight: 1 },
 ];
 
 const fmtDuration = (minutes: number) => minutes < 60 ? `${Math.round(minutes)}m` : `${Math.floor(minutes / 60)}h ${Math.round(minutes % 60)}m`;
@@ -45,6 +45,10 @@ export default function Home() {
   const [toast, setToast] = useState("");
   const [windowDays, setWindowDays] = useState<7 | 30 | 99999>(7);
   const [online, setOnline] = useState(true);
+  const [signedInEmail, setSignedInEmail] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [syncState, setSyncState] = useState<"local" | "loading" | "synced" | "error">("local");
+  const [dataReady, setDataReady] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem("drift-state");
@@ -55,48 +59,66 @@ export default function Home() {
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => undefined);
     return () => { window.removeEventListener("online", on); window.removeEventListener("offline", off); };
   }, []);
-  useEffect(() => { localStorage.setItem("drift-state", JSON.stringify({ entries, categories, steepness, timer })); }, [entries, categories, steepness, timer]);
+  useEffect(() => { if (!userId) localStorage.setItem("drift-state", JSON.stringify({ entries, categories, steepness, timer })); }, [entries, categories, steepness, timer, userId]);
   useEffect(() => { if (!timer) return; const tick = () => setElapsed(Date.now() - timer.startedAt); tick(); const id = setInterval(tick, 1000); return () => clearInterval(id); }, [timer]);
+  useEffect(() => {
+    const applySession = async (session: AuthSession | null) => {
+      setSignedInEmail(session?.user.email || null); setUserId(session?.user.id || null);
+      if (!session) { setSyncState("local"); setDataReady(false); return; }
+      setSyncState("loading");
+      try {
+        const data = await loadDriftData(session.user.id);
+        if (data.categories.length) setCategories(data.categories);
+        setEntries(data.entries); setSteepness(data.steepness); setTimer(data.timer); setSyncState("synced"); setDataReady(true);
+      } catch (error) {
+        setSyncState("error"); setToast(error instanceof Error ? `Could not load Supabase data: ${error.message}` : "Could not load Supabase data");
+      }
+    };
+    return subscribeToAuth(applySession);
+  }, []);
 
   const inPie = categories.filter(c => c.inPie);
   const shares = deriveTargetShares(inPie.map(c => c.id), steepness);
   const category = (id: string) => categories.find(c => c.id === id);
-  const startTimer = (label: string, categoryId: string) => { setTimer({ label, category: categoryId, startedAt: Date.now() }); setToast("Timer started"); setTimeout(() => setToast(""), 1800); };
-  const stopTimer = () => {
+  const startTimer = async (label: string, categoryId: string) => { const next: DriftTimer = { label, category: categoryId, startedAt: Date.now() }; setTimer(next); try { if (userId) await saveRunningTimer(userId, next); setToast("Timer started"); } catch (error) { setSyncState("error"); setToast(error instanceof Error ? error.message : "Timer could not sync"); } setTimeout(() => setToast(""), 1800); };
+  const stopTimer = async () => {
     if (!timer) return;
-    setEntries([{ id: crypto.randomUUID(), label: timer.label || "Untitled", start: new Date(timer.startedAt).toISOString(), end: new Date().toISOString(), category: timer.category, weight: 1 }, ...entries]);
-    setTimer(null); setElapsed(0); setToast(online ? "Saved" : "Saved offline — will sync later"); setTimeout(() => setToast(""), 2200);
+    const entry = { id: crypto.randomUUID(), label: timer.label || "Untitled", start: new Date(timer.startedAt).toISOString(), end: new Date().toISOString(), category: timer.category, weight: 1 };
+    try { const saved = userId ? await createEntry(userId, entry, "timer") : entry; if (userId) await clearRunningTimer(userId); setEntries([saved, ...entries]); setTimer(null); setElapsed(0); setSyncState(userId ? "synced" : "local"); setToast(userId ? "Saved to Supabase" : "Saved on this device"); } catch (error) { setSyncState("error"); setToast(error instanceof Error ? error.message : "Entry could not be saved"); } setTimeout(() => setToast(""), 2600);
   };
-  const move = (index: number, direction: -1 | 1) => { const next = [...categories]; const target = index + direction; if (target < 0 || target >= inPie.length) return; const a = next.findIndex(c => c.id === inPie[index].id), b = next.findIndex(c => c.id === inPie[target].id); [next[a], next[b]] = [next[b], next[a]]; setCategories(next); };
+  const persistIntent = async (nextCategories: Category[], nextSteepness: number) => { if (!userId || !dataReady) return; try { setSyncState("loading"); await saveIntent(userId, nextCategories, nextSteepness); setSyncState("synced"); } catch (error) { setSyncState("error"); setToast(error instanceof Error ? error.message : "Intent could not be saved"); } };
+  const move = (index: number, direction: -1 | 1) => { const next = [...categories]; const target = index + direction; if (target < 0 || target >= inPie.length) return; const a = next.findIndex(c => c.id === inPie[index].id), b = next.findIndex(c => c.id === inPie[target].id); [next[a], next[b]] = [next[b], next[a]]; setCategories(next); void persistIntent(next, steepness); };
+  const updateSteepness = (value: number) => { setSteepness(value); void persistIntent(categories, value); };
+  const addEntry = async (entry: Entry) => { try { const saved = userId ? await createEntry(userId, entry) : entry; setEntries([saved, ...entries]); setShowForm(false); setSyncState(userId ? "synced" : "local"); setToast(userId ? "Saved to Supabase" : "Saved on this device"); } catch (error) { setSyncState("error"); setToast(error instanceof Error ? error.message : "Entry could not be saved"); } setTimeout(() => setToast(""), 2600); };
 
   return (
     <main className="app-shell">
       <header className="topbar">
         <button className="wordmark" onClick={() => setTab("log")} aria-label="The Drift home"><span className="mark">D</span><span>The Drift</span></button>
-        <div className="top-actions"><span className={`sync ${online ? "" : "offline"}`}><i />{online ? "Synced" : "Offline"}</span><button className="icon-button" onClick={() => setShowSettings(true)} aria-label="Open settings">•••</button></div>
+        <div className="top-actions"><span className={`sync ${!online || syncState === "error" ? "offline" : ""}`}><i />{!online ? "Offline" : syncState === "loading" ? "Syncing…" : syncState === "error" ? "Sync issue" : syncState === "synced" ? "Synced" : "Local only"}</span><button className="icon-button" onClick={() => setShowSettings(true)} aria-label="Open settings">•••</button></div>
       </header>
 
-      {tab === "log" && <LogScreen {...{ categories, entries, timer, elapsed, showForm, setShowForm, startTimer, stopTimer, setEntries, category }} />}
-      {tab === "intent" && <IntentScreen {...{ inPie, shares, steepness, setSteepness, move }} />}
+      {tab === "log" && <LogScreen {...{ categories, entries, timer, elapsed, showForm, setShowForm, startTimer, stopTimer, addEntry, category }} />}
+      {tab === "intent" && <IntentScreen {...{ inPie, shares, steepness, setSteepness: updateSteepness, move }} />}
       {tab === "drift" && <DriftScreen {...{ categories, entries, shares, windowDays, setWindowDays, category }} />}
 
       <nav className="tabbar" aria-label="Main navigation">
         {(["log", "intent", "drift"] as Tab[]).map(name => <button key={name} className={tab === name ? "active" : ""} onClick={() => setTab(name)}><span className={`nav-icon ${name}`} />{name[0].toUpperCase() + name.slice(1)}</button>)}
       </nav>
 
-      {showSettings && <Settings onClose={() => setShowSettings(false)} onConnected={(message: string) => { setShowSettings(false); setToast(message); setTimeout(() => setToast(""), 2600); }} />}
+      {showSettings && <Settings signedInEmail={signedInEmail} onClose={() => setShowSettings(false)} onConnected={(message: string) => { setShowSettings(false); setToast(message); setTimeout(() => setToast(""), 2600); }} />}
       {toast && <div className="toast" role="status">{toast}</div>}
     </main>
   );
 }
 
-function LogScreen({ categories, entries, timer, elapsed, showForm, setShowForm, startTimer, stopTimer, setEntries, category }: any) {
+function LogScreen({ categories, entries, timer, elapsed, showForm, setShowForm, startTimer, stopTimer, addEntry, category }: any) {
   const recent = [
     ["Project planning", "career"], ["Walk outside", "physical"], ["Reading", "growth"], ["Call family", "family"], ["Dinner together", "romance"],
   ];
-  const grouped = entries.reduce((acc: Record<string, Entry[]>, e: Entry) => { const key = new Date(e.start).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" }); (acc[key] ||= []).push(e); return acc; }, {});
+  const grouped = entries.reduce((acc: Record<string, Entry[]>, e: Entry) => { const key = new Date(e.start).toLocaleDateString("en-GB", { weekday: "long", month: "short", day: "numeric", timeZone: "Europe/Bucharest" }); (acc[key] ||= []).push(e); return acc; }, {});
   return <section className="screen log-screen">
-    <div className="screen-heading"><div><p className="eyebrow">Today · {new Date().toLocaleDateString(undefined, { month: "long", day: "numeric" })}</p><h1>Where did your time go?</h1></div><p className="quiet intro">Log what happened. No targets, no verdicts.</p></div>
+    <div className="screen-heading"><div><p className="eyebrow">Today · {new Date().toLocaleDateString("en-GB", { month: "long", day: "numeric", timeZone: "Europe/Bucharest" })}</p><h1>Where did your time go?</h1></div><p className="quiet intro">Log what happened. No targets, no verdicts.</p></div>
     {timer ? <div className="timer-card active-timer"><div className="timer-copy"><span className="live"><i /> Now</span><h2>{timer.label}</h2><p><Dot category={category(timer.category)} />{category(timer.category)?.name}</p></div><div className="clock">{new Date(elapsed).toISOString().slice(11, 19)}</div><button className="stop-button" onClick={stopTimer}>Stop</button></div> : <div className="timer-card">
       <div><p className="eyebrow">Start a timer</p><h2>What are you doing now?</h2></div>
       <button className="primary-button" onClick={() => startTimer("Focused time", "career")}><span>▶</span> Start timer</button>
@@ -104,9 +126,9 @@ function LogScreen({ categories, entries, timer, elapsed, showForm, setShowForm,
     <div className="section-row"><h2>Recent activities</h2><span>Tap to start</span></div>
     <div className="chips">{recent.map(([label, cat]) => <button key={label} onClick={() => startTimer(label, cat)}><Dot category={category(cat)} small />{label}</button>)}</div>
     <button className="add-block" onClick={() => setShowForm(!showForm)}><span>＋</span><span><strong>Add a finished block</strong><small>Log something that already happened</small></span><b>{showForm ? "−" : "+"}</b></button>
-    {showForm && <EntryForm categories={categories} onAdd={(e: Entry) => { setEntries([e, ...entries]); setShowForm(false); }} />}
+    {showForm && <EntryForm categories={categories} onAdd={addEntry} />}
     <div className="entries-head"><h2>Recent log</h2><button>View all</button></div>
-    {Object.entries(grouped).map(([day, dayEntries]: any) => <div className="day" key={day}><div className="day-head"><h3>{day}</h3><span>{fmtDuration(dayEntries.reduce((n: number, e: Entry) => n + minutes(e), 0))} logged</span></div>{dayEntries.map((e: Entry) => <article className="entry" key={e.id}><div className="entry-line" style={{ background: category(e.category)?.color }} /><div className="entry-main"><strong>{e.label}</strong><span>{new Date(e.start).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}–{new Date(e.end).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · {fmtDuration(minutes(e))}</span></div><div className="entry-tags"><span><Dot category={category(e.category)} small />{category(e.category)?.name}</span>{e.category2 && <span><Dot category={category(e.category2)} small />{category(e.category2)?.name}</span>}</div><button aria-label={`Edit ${e.label}`}>•••</button></article>)}</div>)}
+    {Object.entries(grouped).map(([day, dayEntries]: any) => <div className="day" key={day}><div className="day-head"><h3>{day}</h3><span>{fmtDuration(dayEntries.reduce((n: number, e: Entry) => n + minutes(e), 0))} logged</span></div>{dayEntries.map((e: Entry) => <article className="entry" key={e.id}><div className="entry-line" style={{ background: category(e.category)?.color }} /><div className="entry-main"><strong>{e.label}</strong><span>{new Date(e.start).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Bucharest" })}–{new Date(e.end).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Bucharest" })} · {fmtDuration(minutes(e))}</span></div><div className="entry-tags"><span><Dot category={category(e.category)} small />{category(e.category)?.name}</span>{e.category2 && <span><Dot category={category(e.category2)} small />{category(e.category2)?.name}</span>}</div><button aria-label={`Edit ${e.label}`}>•••</button></article>)}</div>)}
   </section>;
 }
 
@@ -130,8 +152,9 @@ function DriftScreen({ categories, entries, shares, windowDays, setWindowDays, c
   return <section className="screen drift-screen"><div className="screen-heading"><div><p className="eyebrow">Intent, meet reality</p><h1>Your drift</h1></div><div className="segmented">{[[7,"7 days"],[30,"30 days"],[99999,"All"]].map(([n,l]) => <button key={n} className={windowDays === n ? "active" : ""} onClick={() => setWindowDays(n)}>{l}</button>)}</div></div><div className="summary-grid"><div><span>Discretionary logged</span><strong>{(totalPie/60).toFixed(1)}h</strong></div><div><span>Days with entries</span><strong>{days}</strong></div><div><span>Coverage</span><strong>{Math.round(logged/(Math.min(windowDays, days)*960)*100)}%</strong></div><div><span>Maintenance</span><strong>{(maint/60/days).toFixed(1)}h/day</strong></div></div><p className="coverage-note">Coverage is still light. Read rank movement and direction before absolute hours.</p><div className="drift-layout"><div className="panel rank-table"><div className="panel-title"><div><h2>Rank movement</h2><p>The clearest comparison when logging is patchy.</p></div><span>Intent → Actual</span></div>{rows.map(({c,intended,actualRank}: any) => <div className="movement" key={c.id}><Dot category={c}/><strong>{c.name}</strong><span>{intended}</span><i>→</i><span>{actualRank || "—"}</span><b className={!actualRank ? "unlogged" : actualRank < intended ? "up" : actualRank > intended ? "down" : "held"}>{!actualRank ? "Unlogged" : actualRank < intended ? `↑${intended-actualRank}` : actualRank > intended ? `↓${actualRank-intended}` : "Held"}</b></div>)}</div><div className="panel bars"><div className="panel-title"><div><h2>Share gaps</h2><p>Actual share against intended marker.</p></div><div className="legend"><span className="fill-key"/>Actual <span className="mark-key"/>Intent</div></div>{[...rows].sort((a,b)=>b.gap-a.gap).map(({c,gap}: any) => <div className="bar-row" key={c.id}><strong>{c.name}</strong><div className="bar-track"><span className="bar-fill" style={{width:`${Math.min(100, actual[c.id]*300)}%`,background:c.color}}/><i style={{left:`${Math.min(100,(shares[c.id]||0)*300)}%`}}/></div><b className={gap >= 0 ? "positive" : "negative"}>{gap >= 0 ? "+" : ""}{Math.round(gap*100)}pp</b></div>)}</div></div><div className="caveat"><strong>How to read this</strong><p>Intended shares come from your ordering and steepness dial, so moving the dial changes every gap. Treat gaps as direction and rough magnitude; use rank movement for anything sharper.</p></div></section>;
 }
 
-function Settings({ onClose, onConnected }: { onClose: () => void; onConnected: (message: string) => void }) {
+function Settings({ signedInEmail, onClose, onConnected }: { signedInEmail: string | null; onClose: () => void; onConnected: (message: string) => void }) {
   const [busy, setBusy] = useState(false); const [error, setError] = useState("");
-  const connect = async (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); setBusy(true); setError(""); const data = new FormData(event.currentTarget); try { const session = await signIn(String(data.get("url")), String(data.get("key")), String(data.get("email")), String(data.get("password"))); const count = await testConnection(session); localStorage.setItem("drift-supabase", JSON.stringify(session)); onConnected(`Supabase connected · ${count} categories found`); } catch (e) { setError(e instanceof Error ? e.message : "Connection failed"); setBusy(false); } };
-  return <div className="modal-backdrop" onMouseDown={onClose}><aside className="settings" onMouseDown={e => e.stopPropagation()}><div className="settings-head"><div><p className="eyebrow">Settings</p><h2>Connect your data</h2></div><button onClick={onClose} aria-label="Close settings">×</button></div><p>The app works locally now. Add your Supabase project details when you are ready to sync across devices.</p><form onSubmit={connect}><label>Supabase project URL<input name="url" type="url" placeholder="https://your-project.supabase.co" required /></label><label>Publishable / anon key<input name="key" type="password" placeholder="eyJ…" required /></label><label>Email<input name="email" type="email" placeholder="you@example.com" required /></label><label>Password<input name="password" type="password" required /></label>{error && <p className="form-error">{error}</p>}<button className="primary-button save" disabled={busy}>{busy ? "Connecting…" : "Connect Supabase"}</button></form><hr/><h3>Install on your phone</h3><p><strong>iPhone:</strong> open in Safari, tap Share, then “Add to Home Screen”.<br/><strong>Android:</strong> open in Chrome and choose “Install app”.</p><div className="note-box">Your Supabase service-role key never belongs here. Only use the publishable/anon key.</div></aside></div>;
+  const connect = async (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); setBusy(true); setError(""); const data = new FormData(event.currentTarget); try { await requestMagicLink(String(data.get("email")), window.location.origin); onConnected("Magic link sent — check your email"); } catch (e) { setError(e instanceof Error ? e.message : "Could not send the magic link"); setBusy(false); } };
+  const disconnect = async () => { setBusy(true); setError(""); try { await signOut(); onConnected("Signed out"); } catch (e) { setError(e instanceof Error ? e.message : "Could not sign out"); setBusy(false); } };
+  return <div className="modal-backdrop" onMouseDown={onClose}><aside className="settings" onMouseDown={e => e.stopPropagation()}><div className="settings-head"><div><p className="eyebrow">Settings</p><h2>Connect your data</h2></div><button onClick={onClose} aria-label="Close settings">×</button></div>{signedInEmail ? <div className="auth-card"><span>Signed in as</span><strong>{signedInEmail}</strong><button className="text-button" onClick={disconnect} disabled={busy}>{busy ? "Signing out…" : "Sign out"}</button>{error && <p className="form-error">{error}</p>}</div> : <><p>Sign in with the email address you added to Supabase. We’ll send you a secure, one-time link—no password needed.</p><form onSubmit={connect}><label>Email<input name="email" type="email" autoComplete="email" placeholder="you@example.com" required /></label>{error && <p className="form-error">{error}</p>}<button className="primary-button save" disabled={busy}>{busy ? "Sending…" : "Send magic link"}</button></form></>}<hr/><h3>Install on your phone</h3><p><strong>iPhone:</strong> open in Safari, tap Share, then “Add to Home Screen”.<br/><strong>Android:</strong> open in Chrome and choose “Install app”.</p><div className="note-box">The app reads its Supabase project details automatically from the environment configuration.</div></aside></div>;
 }
