@@ -79,11 +79,18 @@ export default function Home() {
 
   const inPie = categories.filter(c => c.inPie);
   const shares = deriveTargetShares(inPie.map(c => c.id), steepness);
-  const category = (id: string) => categories.find(c => c.id === id);
+  const category = (id: string) => {
+    const direct = categories.find(c => c.id === id);
+    if (direct) return direct;
+    const legacyName = DEFAULT_CATEGORIES.find(c => c.id === id)?.name;
+    return legacyName ? categories.find(c => c.name === legacyName) : undefined;
+  };
   const startTimer = async (label: string, categoryId: string) => { const next: DriftTimer = { label, category: categoryId, startedAt: Date.now() }; setTimer(next); try { if (userId) await saveRunningTimer(userId, next); setToast("Timer started"); } catch (error) { setSyncState("error"); setToast(error instanceof Error ? error.message : "Timer could not sync"); } setTimeout(() => setToast(""), 1800); };
   const stopTimer = async () => {
     if (!timer) return;
-    const entry = { id: crypto.randomUUID(), label: timer.label || "Untitled", start: new Date(timer.startedAt).toISOString(), end: new Date().toISOString(), category: timer.category, weight: 1 };
+    const resolvedCategory = category(timer.category);
+    if (!resolvedCategory) { setSyncState("error"); setToast("This timer's category is no longer available. Start a new timer."); setTimeout(() => setToast(""), 3200); return; }
+    const entry = { id: crypto.randomUUID(), label: timer.label || "Untitled", start: new Date(timer.startedAt).toISOString(), end: new Date().toISOString(), category: resolvedCategory.id, weight: 1 };
     try { const saved = userId ? await createEntry(userId, entry, "timer") : entry; if (userId) await clearRunningTimer(userId); setEntries([saved, ...entries]); setTimer(null); setElapsed(0); setSyncState(userId ? "synced" : "local"); setToast(userId ? "Saved to Supabase" : "Saved on this device"); } catch (error) { setSyncState("error"); setToast(error instanceof Error ? error.message : "Entry could not be saved"); } setTimeout(() => setToast(""), 2600);
   };
   const persistIntent = async (nextCategories: Category[], nextSteepness: number) => { if (!userId || !dataReady) return; try { setSyncState("loading"); await saveIntent(userId, nextCategories, nextSteepness); setSyncState("synced"); } catch (error) { setSyncState("error"); setToast(error instanceof Error ? error.message : "Intent could not be saved"); } };
@@ -123,10 +130,10 @@ function LogScreen({ categories, entries, timer, elapsed, showForm, setShowForm,
     <div className="screen-heading"><div><p className="eyebrow">Today · {new Date().toLocaleDateString("en-GB", { month: "long", day: "numeric", timeZone: "Europe/Bucharest" })}</p><h1>Where did your time go?</h1></div><p className="quiet intro">Log what happened. No targets, no verdicts.</p></div>
     {timer ? <div className="timer-card active-timer"><div className="timer-copy"><span className="live"><i /> Now</span><h2>{timer.label}</h2><p><Dot category={category(timer.category)} />{category(timer.category)?.name}</p></div><div className="clock">{new Date(elapsed).toISOString().slice(11, 19)}</div><button className="stop-button" onClick={stopTimer}>Stop</button></div> : <div className="timer-card">
       <div><p className="eyebrow">Start a timer</p><h2>What are you doing now?</h2></div>
-      <button className="primary-button" onClick={() => startTimer("Focused time", "career")}><span>▶</span> Start timer</button>
+      <button className="primary-button" onClick={() => startTimer("Focused time", category("career")?.id || categories[0]?.id)} disabled={!categories.length}><span>▶</span> Start timer</button>
     </div>}
     <div className="section-row"><h2>Recent activities</h2><span>Tap to start</span></div>
-    <div className="chips">{recent.map(([label, cat]) => <button key={label} onClick={() => startTimer(label, cat)}><Dot category={category(cat)} small />{label}</button>)}</div>
+    <div className="chips">{recent.map(([label, cat]) => { const resolved = category(cat); return <button key={label} onClick={() => resolved && startTimer(label, resolved.id)} disabled={!resolved}><Dot category={resolved} small />{label}</button>; })}</div>
     <button className="add-block" onClick={() => setShowForm(!showForm)}><span>＋</span><span><strong>Add a finished block</strong><small>Log something that already happened</small></span><b>{showForm ? "−" : "+"}</b></button>
     {showForm && <EntryForm categories={categories} onAdd={addEntry} />}
     <div className="entries-head"><h2>Recent log</h2><button>View all</button></div>
