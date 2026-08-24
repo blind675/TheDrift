@@ -14,3 +14,4 @@
 @media(max-width:760px){.timer-setup{width:100%;grid-template-columns:1fr}.timer-setup .primary-button{width:100%}}
 .bar-row{grid-template-columns:100px 1fr 92px}.bar-row>b{white-space:nowrap}.bar-row>b span{color:var(--muted);font-weight:600}
 @media(max-width:760px){.bar-row{grid-template-columns:80px 1fr 84px}}
+@media(prefers-color-scheme:dark){.log-screen .timer-card,.log-screen .timer-copy h2,.log-screen .clock{color:#f1efe7}.log-screen .timer-setup input,.log-screen .timer-setup select{color:#f1efe7;-webkit-text-fill-color:#f1efe7;color-scheme:dark}.log-screen .timer-setup input::placeholder{color:#a8aaa4;-webkit-text-fill-color:#a8aaa4}.log-screen .timer-setup select option{background:#262723;color:#f1efe7;-webkit-text-fill-color:#f1efe7}}
