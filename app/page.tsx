@@ -126,11 +126,22 @@ function LogScreen({ categories, entries, timer, elapsed, showForm, setShowForm,
     ["Project planning", "career"], ["Walk outside", "physical"], ["Reading", "growth"], ["Call family", "family"], ["Dinner together", "romance"],
   ];
   const grouped = entries.reduce((acc: Record<string, Entry[]>, e: Entry) => { const key = new Date(e.start).toLocaleDateString("en-GB", { weekday: "long", month: "short", day: "numeric", timeZone: "Europe/Bucharest" }); (acc[key] ||= []).push(e); return acc; }, {});
+  const startConfiguredTimer = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const label = String(form.get("timer-label") || "").trim();
+    const categoryId = String(form.get("timer-category") || "");
+    if (label && categoryId) startTimer(label, categoryId);
+  };
   return <section className="screen log-screen">
     <div className="screen-heading"><div><p className="eyebrow">Today · {new Date().toLocaleDateString("en-GB", { month: "long", day: "numeric", timeZone: "Europe/Bucharest" })}</p><h1>Where did your time go?</h1></div><p className="quiet intro">Log what happened. No targets, no verdicts.</p></div>
-    {timer ? <div className="timer-card active-timer"><div className="timer-copy"><span className="live"><i /> Now</span><h2>{timer.label}</h2><p><Dot category={category(timer.category)} />{category(timer.category)?.name}</p></div><div className="clock">{new Date(elapsed).toISOString().slice(11, 19)}</div><button className="stop-button" onClick={stopTimer}>Stop</button></div> : <div className="timer-card">
+    {timer ? <div className="timer-card active-timer"><div className="timer-copy"><span className="live"><i /> Now</span><h2>{timer.label}</h2><p><Dot category={category(timer.category)} />{category(timer.category)?.name}</p></div><div className="clock">{new Date(elapsed).toISOString().slice(11, 19)}</div><button className="stop-button" onClick={stopTimer}>Stop</button></div> : <div className="timer-card timer-ready">
       <div><p className="eyebrow">Start a timer</p><h2>What are you doing now?</h2></div>
-      <button className="primary-button" onClick={() => startTimer("Focused time", category("career")?.id || categories[0]?.id)} disabled={!categories.length}><span>▶</span> Start timer</button>
+      <form className="timer-setup" onSubmit={startConfiguredTimer}>
+        <label>Activity title<input name="timer-label" placeholder="e.g. Project planning" required autoComplete="off" /></label>
+        <label>Category<select key={categories.map((item: Category) => item.id).join("|")} name="timer-category" defaultValue={category("career")?.id || categories[0]?.id || ""} required disabled={!categories.length}>{categories.map((item: Category) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+        <button className="primary-button" type="submit" disabled={!categories.length}><span>▶</span> Start timer</button>
+      </form>
     </div>}
     <div className="section-row"><h2>Recent activities</h2><span>Tap to start</span></div>
     <div className="chips">{recent.map(([label, cat]) => { const resolved = category(cat); return <button key={label} onClick={() => resolved && startTimer(label, resolved.id)} disabled={!resolved}><Dot category={resolved} small />{label}</button>; })}</div>
