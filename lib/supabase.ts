@@ -1,9 +1,10 @@
 import { createClient, type Session, type SupabaseClient } from "@supabase/supabase-js";
 
 export type DriftCategory = { id: string; name: string; color: string; inPie: boolean };
-export type DriftEntry = { id: string; label: string; start: string; end: string; category: string; category2?: string; weight: number; note?: string };
-export type DriftTimer = { label: string; category: string; startedAt: number };
-export type DriftData = { categories: DriftCategory[]; entries: DriftEntry[]; steepness: number; timer: DriftTimer | null };
+export type DriftProject = { id: string; name: string; archived: boolean };
+export type DriftEntry = { id: string; label: string; start: string; end: string; category: string; category2?: string; weight: number; note?: string; projectId?: string };
+export type DriftTimer = { label: string; category: string; projectId?: string; startedAt: number };
+export type DriftData = { categories: DriftCategory[]; projects: DriftProject[]; entries: DriftEntry[]; steepness: number; timer: DriftTimer | null };
 export type AuthSession = Session;
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "");
@@ -56,14 +57,15 @@ export async function signOut(): Promise<void> {
 
 export async function loadDriftData(userId: string): Promise<DriftData> {
   const client = getSupabase();
-  const [categoriesResult, entriesResult, intentResult, timerResult] = await Promise.all([
+  const [categoriesResult, projectsResult, entriesResult, intentResult, timerResult] = await Promise.all([
     client.from("categories").select("id,name,color,in_pie,sort_order").eq("user_id", userId).eq("archived", false).order("sort_order"),
-    client.from("entries").select("id,label,started_at,ended_at,note,entry_allocations(category_id,weight)").eq("user_id", userId).order("started_at", { ascending: false }),
+    client.from("projects").select("id,name,archived").eq("user_id", userId).order("name"),
+    client.from("entries").select("id,label,started_at,ended_at,note,project_id,entry_allocations(category_id,weight)").eq("user_id", userId).order("started_at", { ascending: false }),
     client.from("intent_versions").select("id,steepness,intent_ranks(category_id,rank)").eq("user_id", userId).order("effective_from", { ascending: false }).limit(1).maybeSingle(),
     client.from("running_timer").select("label,started_at,draft").eq("user_id", userId).maybeSingle(),
   ]);
 
-  for (const result of [categoriesResult, entriesResult, intentResult, timerResult]) {
+  for (const result of [categoriesResult, projectsResult, entriesResult, intentResult, timerResult]) {
     if (result.error) throw result.error;
   }
 
@@ -86,17 +88,21 @@ export async function loadDriftData(userId: string): Promise<DriftData> {
       category2: allocations[1]?.category_id,
       weight: Number(allocations[0].weight),
       note: row.note || undefined,
+      projectId: row.project_id || undefined,
     }];
   });
 
-  const timerDraft = timerResult.data?.draft as { category_id?: string } | null;
+  const projects: DriftProject[] = (projectsResult.data || []).map(row => ({ id: row.id, name: row.name, archived: row.archived }));
+  const timerDraft = timerResult.data?.draft as { category_id?: string; project_id?: string } | null;
   return {
     categories,
+    projects,
     entries,
     steepness: Number(intentResult.data?.steepness ?? 1),
     timer: timerResult.data ? {
       label: timerResult.data.label || "Focused time",
       category: timerDraft?.category_id || categories[0]?.id || "",
+      projectId: timerDraft?.project_id || undefined,
       startedAt: new Date(timerResult.data.started_at).getTime(),
     } : null,
   };
@@ -111,6 +117,7 @@ export async function createEntry(userId: string, entry: DriftEntry, source: "ma
     started_at: entry.start,
     ended_at: entry.end,
     note: entry.note || null,
+    project_id: entry.projectId || null,
     source,
   }).select("id").single();
   if (error) throw error;
@@ -124,6 +131,20 @@ export async function createEntry(userId: string, entry: DriftEntry, source: "ma
     throw allocationError;
   }
   return { ...entry, id: data.id };
+}
+
+export async function createProject(userId: string, name: string): Promise<DriftProject> {
+  const normalizedName = name.trim().replace(/\s+/g, " ");
+  if (!normalizedName) throw new Error("Project name cannot be empty.");
+  const client = getSupabase();
+  const { data, error } = await client.from("projects").insert({ user_id: userId, name: normalizedName }).select("id,name,archived").single();
+  if (error?.code === "23505") {
+    const { data: existing, error: lookupError } = await client.from("projects").select("id,name,archived").eq("user_id", userId).eq("archived", false).ilike("name", normalizedName).limit(1).single();
+    if (lookupError) throw lookupError;
+    return { id: existing.id, name: existing.name, archived: existing.archived };
+  }
+  if (error) throw error;
+  return { id: data.id, name: data.name, archived: data.archived };
 }
 
 export async function deleteEntry(userId: string, entryId: string): Promise<void> {
@@ -143,7 +164,7 @@ export async function saveRunningTimer(userId: string, timer: DriftTimer): Promi
     user_id: userId,
     label: timer.label,
     started_at: new Date(timer.startedAt).toISOString(),
-    draft: { category_id: timer.category },
+    draft: { category_id: timer.category, project_id: timer.projectId || null },
   });
   if (error) throw error;
 }

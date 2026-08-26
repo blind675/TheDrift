@@ -2,8 +2,12 @@
 create extension if not exists "pgcrypto";
 create table categories (id uuid primary key default gen_random_uuid(), user_id uuid not null references auth.users(id) on delete cascade, name text not null, color text not null, in_pie boolean not null default true, sort_order int not null, info_examples text, info_counter text, info_edge text, archived boolean not null default false, created_at timestamptz not null default now());
 create index on categories (user_id) where not archived;
-create table entries (id uuid primary key default gen_random_uuid(), user_id uuid not null references auth.users(id) on delete cascade, label text, started_at timestamptz not null, ended_at timestamptz not null, note text, source text not null default 'manual' check (source in ('timer','manual','template')), created_at timestamptz not null default now(), updated_at timestamptz not null default now(), constraint entry_positive check (ended_at > started_at), constraint entry_sane_length check (ended_at - started_at <= interval '16 hours'));
+create table projects (id uuid primary key default gen_random_uuid(), user_id uuid not null references auth.users(id) on delete cascade, name text not null check (length(btrim(name)) between 1 and 120), archived boolean not null default false, created_at timestamptz not null default now(), updated_at timestamptz not null default now(), constraint projects_id_user_unique unique (id,user_id));
+create index projects_user_id_idx on projects (user_id);
+create unique index projects_user_active_name_unique on projects (user_id,lower(btrim(name))) where not archived;
+create table entries (id uuid primary key default gen_random_uuid(), user_id uuid not null references auth.users(id) on delete cascade, project_id uuid, label text, started_at timestamptz not null, ended_at timestamptz not null, note text, source text not null default 'manual' check (source in ('timer','manual','template')), created_at timestamptz not null default now(), updated_at timestamptz not null default now(), constraint entries_project_owner_fkey foreign key (project_id,user_id) references projects(id,user_id) on delete restrict, constraint entry_positive check (ended_at > started_at), constraint entry_sane_length check (ended_at - started_at <= interval '16 hours'));
 create index on entries (user_id, started_at desc);
+create index entries_user_project_started_idx on entries (user_id,project_id,started_at desc) where project_id is not null;
 create table entry_allocations (entry_id uuid not null references entries(id) on delete cascade, category_id uuid not null references categories(id), weight numeric(3,2) not null check (weight > 0 and weight <= 1), primary key (entry_id, category_id));
 create index on entry_allocations (category_id);
 create or replace function check_allocation_invariants() returns trigger language plpgsql as $$ declare n int; total numeric; eid uuid := coalesce(new.entry_id, old.entry_id); begin select count(*), coalesce(sum(weight),0) into n,total from entry_allocations where entry_id=eid; if n=0 then return null; end if; if n>2 then raise exception 'An entry may have at most two categories (got %)',n; end if; if abs(total-1.0)>0.001 then raise exception 'Allocation weights must sum to 1.0 (got %)',total; end if; return null; end $$;
@@ -12,8 +16,12 @@ create table intent_versions (id uuid primary key default gen_random_uuid(), use
 create index on intent_versions (user_id, effective_from desc);
 create table intent_ranks (intent_id uuid not null references intent_versions(id) on delete cascade, category_id uuid not null references categories(id), rank int not null check (rank>0), primary key (intent_id,category_id), constraint one_category_per_rank unique (intent_id,rank) deferrable initially deferred);
 create table running_timer (user_id uuid primary key references auth.users(id) on delete cascade, label text, started_at timestamptz not null, draft jsonb);
-alter table categories enable row level security; alter table entries enable row level security; alter table entry_allocations enable row level security; alter table intent_versions enable row level security; alter table intent_ranks enable row level security; alter table running_timer enable row level security;
+alter table categories enable row level security; alter table projects enable row level security; alter table entries enable row level security; alter table entry_allocations enable row level security; alter table intent_versions enable row level security; alter table intent_ranks enable row level security; alter table running_timer enable row level security;
 create policy own_categories on categories for all using (auth.uid()=user_id) with check (auth.uid()=user_id);
+create policy projects_select_own on projects for select to authenticated using ((select auth.uid())=user_id);
+create policy projects_insert_own on projects for insert to authenticated with check ((select auth.uid())=user_id);
+create policy projects_update_own on projects for update to authenticated using ((select auth.uid())=user_id) with check ((select auth.uid())=user_id);
+grant select,insert,update on projects to authenticated;
 create policy own_entries on entries for all using (auth.uid()=user_id) with check (auth.uid()=user_id);
 create policy own_intents on intent_versions for all using (auth.uid()=user_id) with check (auth.uid()=user_id);
 create policy own_timer on running_timer for all using (auth.uid()=user_id) with check (auth.uid()=user_id);

@@ -13,9 +13,20 @@ You need a free Supabase project, one private user account, and two public value
 1. In the Supabase sidebar, open **SQL Editor**.
 2. Choose **New query**.
 3. Open this project's `supabase/schema.sql`, copy the whole file, paste it into the editor, and press **Run**.
-4. The result should say `Success. No rows returned`. In **Table Editor**, confirm these tables exist: `categories`, `entries`, `entry_allocations`, `intent_versions`, `intent_ranks`, and `running_timer`.
+4. The result should say `Success. No rows returned`. In **Table Editor**, confirm these tables exist: `categories`, `projects`, `entries`, `entry_allocations`, `intent_versions`, `intent_ranks`, and `running_timer`.
 
 Run the schema only once on a fresh project. If you need to start over during development, it is simpler to create another free project than to partially rerun the script.
+
+### Updating an existing Drift database
+
+If you created your database before project tracking was added, do not rerun `schema.sql`.
+
+1. Open **SQL Editor → New query** in Supabase.
+2. Copy the complete contents of `supabase/add_projects.sql` into the query.
+3. Press **Run** once.
+4. Confirm that **Table Editor** now contains `projects` and that `entries` has a nullable `project_id` column.
+
+The update is additive: existing entries remain valid with no project assigned. Run this database update before deploying the matching application code.
 
 ## 3. Create your private login
 
@@ -61,7 +72,7 @@ where schemaname = 'public'
 order by tablename, policyname;
 ```
 
-You should see one ownership policy for each table. Do not disable RLS, even though this is a personal app.
+You should see ownership policies for every table, including three policies for `projects` (select, insert, and update). Do not disable RLS, even though this is a personal app.
 
 ## 8. Connect and test authentication
 
@@ -74,7 +85,7 @@ You should see one ownership policy for each table. Do not disable RLS, even tho
 
 The app completes passwordless Supabase authentication and persists the session. Once signed in, it loads categories, entries, the latest intent, and any running timer from Supabase, then writes new changes back to Supabase. The header now distinguishes local-only, syncing, synced, offline, and failed states.
 
-Cross-device reads and online writes are now supported. The remaining offline phase is a durable IndexedDB outbox with retry and conflict handling. Until that exists, keep the app online while making signed-in changes.
+Cross-device reads and online writes are now supported. Projects can be selected or created while logging, and project assignments are saved with entries and running timers. The remaining offline phase is a durable IndexedDB outbox with retry and conflict handling. Until that exists, keep the app online while making signed-in changes.
 
 ## 9. Install the PWA
 
@@ -87,5 +98,6 @@ The deployed site must use HTTPS for service-worker installation. Localhost is t
 
 - **`new row violates row-level security policy`**: you are not signed in, or the inserted `user_id` is different from the signed-in user's UUID.
 - **No categories appear**: rerun `seed.sql` with the correct user UUID.
+- **`Could not find the table 'public.projects'` or `project_id` errors**: run `supabase/add_projects.sql` once in the SQL Editor, then reload the app.
 - **Schema script says an object already exists**: it has already been run; do not rerun it on the same database.
 - **PWA does not offer installation**: use the deployed HTTPS URL, confirm the manifest loads at `/manifest.webmanifest`, and on iOS use Safari's Share menu.
