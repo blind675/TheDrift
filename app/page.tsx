@@ -172,16 +172,19 @@ function DriftScreen({ categories, entries, shares, windowDays, setWindowDays, c
   const daysWithEntries = new Set(visible.map((e: Entry) => new Date(e.start).toDateString())).size;
   const averagingDays = Math.max(1, daysWithEntries);
   const pieCategoryIds = new Set(pieCats.map((c: Category) => c.id));
-  const daysWithValueEntries = new Set(visible.filter((e: Entry) => pieCategoryIds.has(e.category) || Boolean(e.category2 && pieCategoryIds.has(e.category2))).map((e: Entry) => new Date(e.start).toDateString())).size;
+  const valueEntries = visible.filter((e: Entry) => pieCategoryIds.has(e.category) || Boolean(e.category2 && pieCategoryIds.has(e.category2)));
   const maintenanceId = category("maintenance")?.id;
   const maint = maintenanceId ? totals[maintenanceId] || 0 : 0;
-  const coverageDays = windowDays === 0 ? 1 : Math.min(windowDays, Math.max(1, daysWithValueEntries));
-  const coverage = Math.min(100, Math.round(totalPie / (coverageDays * 960) * 100));
+  const firstValueDay = valueEntries.length ? new Date(Math.min(...valueEntries.map((e: Entry) => new Date(e.start).getTime()))) : todayStart;
+  firstValueDay.setHours(0, 0, 0, 0);
+  const allActivityDays = Math.max(1, Math.round((todayStart.getTime() - firstValueDay.getTime()) / 86400000) + 1);
+  const coverageDays = windowDays === 0 ? 1 : windowDays === 99999 ? allActivityDays : windowDays;
+  const coverage = Math.min(100, Math.round(totalPie / (coverageDays * 720) * 100));
   const coverageMessage = coverage < 25
-    ? `You have logged ${coverage}% of an assumed 16-hour waking day as value-category time. Maintenance is excluded. With partial logs, rank movement is more reliable than exact hour comparisons.`
+    ? `You have logged ${coverage}% of the 12 discretionary hours available per day. The separate 12-hour Maintenance allocation is excluded. With partial logs, rank movement is more reliable than exact hour comparisons.`
     : coverage < 70
-      ? `You have logged ${coverage}% of an assumed 16-hour waking day as value-category time. Maintenance is excluded. Share gaps are useful, but some time is still untracked.`
-      : `You have logged ${coverage}% of an assumed 16-hour waking day as value-category time, excluding Maintenance, giving this comparison strong coverage.`;
+      ? `You have logged ${coverage}% of the 12 discretionary hours available per day. The separate 12-hour Maintenance allocation is excluded. Share gaps are useful, but some discretionary time is still untracked.`
+      : `You have logged ${coverage}% of the 12 discretionary hours available per day, excluding the separate 12-hour Maintenance allocation, giving this comparison strong coverage.`;
   return <section className="screen drift-screen"><div className="screen-heading"><div><p className="eyebrow">Intent, meet reality</p><h1>Your drift</h1></div><div className="segmented">{[[0,"Today"],[7,"7 days"],[30,"30 days"],[99999,"All activity"]].map(([n,l]) => <button key={n} className={windowDays === n ? "active" : ""} onClick={() => setWindowDays(n)}>{l}</button>)}</div></div><div className="summary-grid"><div><span>Discretionary logged</span><strong>{(totalPie/60).toFixed(1)}h</strong></div><div><span>Days with entries</span><strong>{daysWithEntries}</strong></div><div><span>Coverage</span><strong>{coverage}%</strong></div><div><span>Maintenance</span><strong>{(maint/60/averagingDays).toFixed(1)}h/day</strong></div></div><p className="coverage-note">{coverageMessage}</p><div className="drift-layout"><div className="panel rank-table"><div className="panel-title"><div><h2>Rank movement</h2><p>The clearest comparison when logging is patchy.</p></div><span>Intent → Actual</span></div>{rows.map(({c,intended,actualRank}: any) => <div className="movement" key={c.id}><Dot category={c}/><strong>{c.name}</strong><span>{intended}</span><i>→</i><span>{actualRank || "—"}</span><b className={!actualRank ? "unlogged" : actualRank < intended ? "up" : actualRank > intended ? "down" : "held"}>{!actualRank ? "Unlogged" : actualRank < intended ? `↑${intended-actualRank}` : actualRank > intended ? `↓${actualRank-intended}` : "Held"}</b></div>)}</div><div className="panel bars"><div className="panel-title"><div><h2>Share gaps</h2><p>Actual share against intended marker.</p></div><div className="legend"><span className="fill-key"/>Actual <span className="mark-key"/>Intent</div></div>{rows.map(({c,gap,hours}: any) => <div className="bar-row" key={c.id}><strong>{c.name}</strong><div className="bar-track"><span className="bar-fill" style={{width:`${Math.min(100, actual[c.id]*300)}%`,background:c.color}}/><i style={{left:`${Math.min(100,(shares[c.id]||0)*300)}%`}}/></div><b className={gap >= 0 ? "positive" : "negative"}>{gap >= 0 ? "+" : ""}{Math.round(gap*100)}pp <span>· {hours.toFixed(1)}h</span></b></div>)}</div></div><div className="caveat"><strong>How to read this</strong><p>Intended shares come from your ordering and steepness dial, so moving the dial changes every gap. Treat gaps as direction and rough magnitude; use rank movement for anything sharper.</p></div></section>;
 }
 
