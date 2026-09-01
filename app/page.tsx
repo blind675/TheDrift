@@ -25,6 +25,7 @@ const DEMO_ENTRIES: Entry[] = [
 ];
 
 const fmtDuration = (minutes: number) => minutes < 60 ? `${Math.round(minutes)}m` : `${Math.floor(minutes / 60)}h ${Math.round(minutes % 60)}m`;
+const fmtTimerElapsed = (milliseconds: number) => { const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000)); const days = Math.floor(totalSeconds / 86400); const hours = Math.floor(totalSeconds % 86400 / 3600); const minutes = Math.floor(totalSeconds % 3600 / 60); const seconds = totalSeconds % 60; const clock = [hours, minutes, seconds].map(value => String(value).padStart(2, "0")).join(":"); return days ? `${days}d ${clock}` : clock; };
 const minutes = (entry: Entry) => Math.max(0, (new Date(entry.end).getTime() - new Date(entry.start).getTime()) / 60000);
 const todayLocal = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); };
 const timeLocal = (offset = 0) => { const d = new Date(Date.now() + offset * 60000); return d.toTimeString().slice(0, 5); };
@@ -148,7 +149,7 @@ function LogScreen({ categories, projects, entries, timer, elapsed, showForm, se
   };
   return <section className="screen log-screen">
     <div className="screen-heading"><div><p className="eyebrow">Today · {new Date().toLocaleDateString("en-GB", { month: "long", day: "numeric", timeZone: "Europe/Bucharest" })}</p><h1>Where did your time go?</h1></div><p className="quiet intro">Log what happened. No targets, no verdicts.</p></div>
-    {timer ? <div className="timer-card active-timer"><div className="timer-copy"><span className="live"><i /> Now</span><h2>{timer.label}</h2><p><Dot category={category(timer.category)} />{category(timer.category)?.name}{timer.projectId && <span className="project-tag">◆ {project(timer.projectId)?.name}</span>}</p></div><div className="clock">{new Date(elapsed).toISOString().slice(11, 19)}</div><button className="stop-button" onClick={stopTimer}>Stop</button></div> : <div className="timer-card timer-ready">
+    {timer ? <div className="timer-card active-timer"><div className="timer-copy"><span className="live"><i /> Now</span><h2>{timer.label}</h2><p><Dot category={category(timer.category)} />{category(timer.category)?.name}{timer.projectId && <span className="project-tag">◆ {project(timer.projectId)?.name}</span>}</p></div><div className="clock">{fmtTimerElapsed(elapsed)}</div><button className="stop-button" onClick={stopTimer}>Stop</button></div> : <div className="timer-card timer-ready">
       <div><p className="eyebrow">Start a timer</p><h2>What are you doing now?</h2></div>
       <form className="timer-setup" onSubmit={startConfiguredTimer}>
         <label>Activity title<input name="timer-label" placeholder="e.g. Project planning" required autoComplete="off" /></label>

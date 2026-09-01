@@ -28,6 +28,16 @@ If you created your database before project tracking was added, do not rerun `sc
 
 The update is additive: existing entries remain valid with no project assigned. Run this database update before deploying the matching application code.
 
+### Allowing timers to run across multiple days
+
+Older Drift databases limit every entry to 16 hours. To allow a timer to run overnight or for several days:
+
+1. Open **SQL Editor → New query** in Supabase.
+2. Copy the complete contents of `supabase/allow_long_entries.sql` into the query.
+3. Press **Run** once.
+
+This raises the safety limit to 365 days. It does not alter existing entries or running timers.
+
 ## 3. Create your private login
 
 1. Open **Authentication → Users**.
@@ -99,5 +109,6 @@ The deployed site must use HTTPS for service-worker installation. Localhost is t
 - **`new row violates row-level security policy`**: you are not signed in, or the inserted `user_id` is different from the signed-in user's UUID.
 - **No categories appear**: rerun `seed.sql` with the correct user UUID.
 - **`Could not find the table 'public.projects'` or `project_id` errors**: run `supabase/add_projects.sql` once in the SQL Editor, then reload the app.
+- **`entry_sane_length` error when stopping a long timer**: run `supabase/allow_long_entries.sql` once in the SQL Editor, then press Stop again. The running timer remains available until the entry saves successfully.
 - **Schema script says an object already exists**: it has already been run; do not rerun it on the same database.
 - **PWA does not offer installation**: use the deployed HTTPS URL, confirm the manifest loads at `/manifest.webmanifest`, and on iOS use Safari's Share menu.
