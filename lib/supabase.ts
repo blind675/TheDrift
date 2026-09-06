@@ -3,7 +3,7 @@ import { createClient, type Session, type SupabaseClient } from "@supabase/supab
 export type DriftCategory = { id: string; name: string; color: string; inPie: boolean };
 export type DriftProject = { id: string; name: string; archived: boolean };
 export type DriftEntry = { id: string; label: string; start: string; end: string; category: string; category2?: string; weight: number; note?: string; projectId?: string };
-export type DriftTimer = { label: string; category: string; projectId?: string; startedAt: number };
+export type DriftTimer = { label: string; category: string; category2?: string; weight: number; projectId?: string; startedAt: number };
 export type DriftData = { categories: DriftCategory[]; projects: DriftProject[]; entries: DriftEntry[]; steepness: number; timer: DriftTimer | null };
 export type AuthSession = Session;
 
@@ -93,7 +93,7 @@ export async function loadDriftData(userId: string): Promise<DriftData> {
   });
 
   const projects: DriftProject[] = (projectsResult.data || []).map(row => ({ id: row.id, name: row.name, archived: row.archived }));
-  const timerDraft = timerResult.data?.draft as { category_id?: string; project_id?: string } | null;
+  const timerDraft = timerResult.data?.draft as { category_id?: string; category2_id?: string; weight?: number; project_id?: string } | null;
   return {
     categories,
     projects,
@@ -102,6 +102,8 @@ export async function loadDriftData(userId: string): Promise<DriftData> {
     timer: timerResult.data ? {
       label: timerResult.data.label || "Focused time",
       category: timerDraft?.category_id || categories[0]?.id || "",
+      category2: timerDraft?.category2_id || undefined,
+      weight: Number(timerDraft?.weight ?? 1),
       projectId: timerDraft?.project_id || undefined,
       startedAt: new Date(timerResult.data.started_at).getTime(),
     } : null,
@@ -164,7 +166,7 @@ export async function saveRunningTimer(userId: string, timer: DriftTimer): Promi
     user_id: userId,
     label: timer.label,
     started_at: new Date(timer.startedAt).toISOString(),
-    draft: { category_id: timer.category, project_id: timer.projectId || null },
+    draft: { category_id: timer.category, category2_id: timer.category2 || null, weight: timer.weight, project_id: timer.projectId || null },
   });
   if (error) throw error;
 }

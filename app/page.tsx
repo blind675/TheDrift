@@ -98,12 +98,14 @@ export default function Home() {
     setProjects(current => current.some(item => item.id === created.id) ? current : [...current, created].sort((a, b) => a.name.localeCompare(b.name)));
     return created.id;
   };
-  const startTimer = async (label: string, categoryId: string, projectId?: string) => { const next: DriftTimer = { label, category: categoryId, projectId, startedAt: Date.now() }; setTimer(next); try { if (userId) await saveRunningTimer(userId, next); setToast("Timer started"); } catch (error) { setSyncState("error"); setToast(error instanceof Error ? error.message : "Timer could not sync"); } setTimeout(() => setToast(""), 1800); };
+  const startTimer = async (label: string, categoryId: string, projectId?: string, category2?: string, weight = 1) => { const next: DriftTimer = { label, category: categoryId, category2, weight: category2 ? weight : 1, projectId, startedAt: Date.now() }; setTimer(next); try { if (userId) await saveRunningTimer(userId, next); setToast("Timer started"); } catch (error) { setSyncState("error"); setToast(error instanceof Error ? error.message : "Timer could not sync"); } setTimeout(() => setToast(""), 1800); };
   const stopTimer = async () => {
     if (!timer) return;
     const resolvedCategory = category(timer.category);
     if (!resolvedCategory) { setSyncState("error"); setToast("This timer's category is no longer available. Start a new timer."); setTimeout(() => setToast(""), 3200); return; }
-    const entry = { id: crypto.randomUUID(), label: timer.label || "Untitled", start: new Date(timer.startedAt).toISOString(), end: new Date().toISOString(), category: resolvedCategory.id, weight: 1, projectId: timer.projectId };
+    const resolvedCategory2 = timer.category2 ? category(timer.category2) : undefined;
+    if (timer.category2 && !resolvedCategory2) { setSyncState("error"); setToast("This timer's second category is no longer available. Start a new timer."); setTimeout(() => setToast(""), 3200); return; }
+    const entry = { id: crypto.randomUUID(), label: timer.label || "Untitled", start: new Date(timer.startedAt).toISOString(), end: new Date().toISOString(), category: resolvedCategory.id, category2: resolvedCategory2?.id, weight: resolvedCategory2 ? timer.weight ?? .5 : 1, projectId: timer.projectId };
     try { const saved = userId ? await createEntry(userId, entry, "timer") : entry; if (userId) await clearRunningTimer(userId); setEntries([saved, ...entries]); setTimer(null); setElapsed(0); setSyncState(userId ? "synced" : "local"); setToast(userId ? "Saved to Supabase" : "Saved on this device"); } catch (error) { setSyncState("error"); setToast(error instanceof Error ? error.message : "Entry could not be saved"); } setTimeout(() => setToast(""), 2600);
   };
   const persistIntent = async (nextCategories: Category[], nextSteepness: number) => { if (!userId || !dataReady) return; try { setSyncState("loading"); await saveIntent(userId, nextCategories, nextSteepness); setSyncState("synced"); } catch (error) { setSyncState("error"); setToast(error instanceof Error ? error.message : "Intent could not be saved"); } };
@@ -135,6 +137,9 @@ export default function Home() {
 
 function LogScreen({ categories, projects, entries, timer, elapsed, showForm, setShowForm, startTimer, stopTimer, addEntry, removeEntry, category, project, getOrCreateProject }: any) {
   const [openMenu, setOpenMenu] = useState<string | null>(null);
+  const [timerSplit, setTimerSplit] = useState(false);
+  const [timerWeight, setTimerWeight] = useState(80);
+  const [timerCategory, setTimerCategory] = useState("");
   const recent = [
     ["Project planning", "career"], ["Walk outside", "physical"], ["Reading", "growth"], ["Call family", "family"], ["Dinner together", "romance"],
   ];
@@ -144,18 +149,23 @@ function LogScreen({ categories, projects, entries, timer, elapsed, showForm, se
     const form = new FormData(event.currentTarget);
     const label = String(form.get("timer-label") || "").trim();
     const categoryId = String(form.get("timer-category") || "");
+    const category2Id = timerSplit ? String(form.get("timer-category2") || "") : undefined;
     const projectId = await getOrCreateProject(String(form.get("timer-project") || ""));
-    if (label && categoryId) await startTimer(label, categoryId, projectId);
+    if (label && categoryId && category2Id !== categoryId) await startTimer(label, categoryId, projectId, category2Id, timerSplit ? timerWeight / 100 : 1);
   };
+  const selectedTimerCategory = categories.some((item: Category) => item.id === timerCategory) ? timerCategory : category("career")?.id || categories[0]?.id || "";
+  const secondaryTimerCategories = categories.filter((item: Category) => item.id !== selectedTimerCategory);
   return <section className="screen log-screen">
     <div className="screen-heading"><div><p className="eyebrow">Today · {new Date().toLocaleDateString("en-GB", { month: "long", day: "numeric", timeZone: "Europe/Bucharest" })}</p><h1>Where did your time go?</h1></div><p className="quiet intro">Log what happened. No targets, no verdicts.</p></div>
-    {timer ? <div className="timer-card active-timer"><div className="timer-copy"><span className="live"><i /> Now</span><h2>{timer.label}</h2><p><Dot category={category(timer.category)} />{category(timer.category)?.name}{timer.projectId && <span className="project-tag">◆ {project(timer.projectId)?.name}</span>}</p></div><div className="clock">{fmtTimerElapsed(elapsed)}</div><button className="stop-button" onClick={stopTimer}>Stop</button></div> : <div className="timer-card timer-ready">
+    {timer ? <div className="timer-card active-timer"><div className="timer-copy"><span className="live"><i /> Now</span><h2>{timer.label}</h2><p><Dot category={category(timer.category)} />{category(timer.category)?.name}{timer.category2 && <><span className="timer-weight">{Math.round((timer.weight ?? .5) * 100)}%</span><Dot category={category(timer.category2)} />{category(timer.category2)?.name}<span className="timer-weight">{Math.round((1 - (timer.weight ?? .5)) * 100)}%</span></>}{timer.projectId && <span className="project-tag">◆ {project(timer.projectId)?.name}</span>}</p></div><div className="clock">{fmtTimerElapsed(elapsed)}</div><button className="stop-button" onClick={stopTimer}>Stop</button></div> : <div className="timer-card timer-ready">
       <div><p className="eyebrow">Start a timer</p><h2>What are you doing now?</h2></div>
       <form className="timer-setup" onSubmit={startConfiguredTimer}>
         <label>Activity title<input name="timer-label" placeholder="e.g. Project planning" required autoComplete="off" /></label>
-        <label>Category<select key={categories.map((item: Category) => item.id).join("|")} name="timer-category" defaultValue={category("career")?.id || categories[0]?.id || ""} required disabled={!categories.length}>{categories.map((item: Category) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+        <label>Category<select name="timer-category" value={selectedTimerCategory} onChange={event => setTimerCategory(event.target.value)} required disabled={!categories.length}>{categories.map((item: Category) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
         <ProjectField projects={projects} name="timer-project" compact />
         <button className="primary-button" type="submit" disabled={!categories.length}><span>▶</span> Start timer</button>
+        <button className="timer-split-toggle" type="button" onClick={() => setTimerSplit(!timerSplit)}>{timerSplit ? "− Remove category split" : "＋ Split between two categories"}</button>
+        {timerSplit && <div className="timer-split-box"><label>Second category<select key={selectedTimerCategory} name="timer-category2" required>{secondaryTimerCategories.map((item: Category) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label className="timer-split-range">Split {timerWeight}/{100-timerWeight}<input type="range" min="10" max="90" step="10" value={timerWeight} onChange={event => setTimerWeight(Number(event.target.value))} /></label>{timerWeight === 50 && <small>Even splits often mean one activity rather than two.</small>}</div>}
       </form>
     </div>}
     <div className="section-row"><h2>Recent activities</h2><span>Tap to start</span></div>
