@@ -211,11 +211,16 @@ function IntentScreen({ inPie, shares, steepness, setSteepness, move }: any) {
 
 function DriftScreen({ categories, projects, entries, shares, windowDays, setWindowDays, category }: any) {
   const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
-  const cutoff = windowDays === 0 ? todayStart.getTime() : Date.now() - windowDays * 86400000; const visible = windowDays === 99999 ? entries : entries.filter((e: Entry) => new Date(e.start).getTime() >= cutoff);
-  const totals: Record<string, number> = {}; visible.forEach((e: Entry) => { const m = minutes(e); totals[e.category] = (totals[e.category] || 0) + m * e.weight; if (e.category2) totals[e.category2] = (totals[e.category2] || 0) + m * (1 - e.weight); });
+  const rangeEnd = Date.now();
+  const rangeStart = windowDays === 0 ? todayStart.getTime() : windowDays === 99999 ? 0 : rangeEnd - windowDays * 86400000;
+  const visible = entries.filter((entry: Entry) => new Date(entry.end).getTime() > rangeStart && new Date(entry.start).getTime() < rangeEnd);
+  const minutesInRange = (entry: Entry) => Math.max(0, (Math.min(new Date(entry.end).getTime(), rangeEnd) - Math.max(new Date(entry.start).getTime(), rangeStart)) / 60000);
+  const totals: Record<string, number> = {}; visible.forEach((e: Entry) => { const m = minutesInRange(e); totals[e.category] = (totals[e.category] || 0) + m * e.weight; if (e.category2) totals[e.category2] = (totals[e.category2] || 0) + m * (1 - e.weight); });
   const pieCats = categories.filter((c: Category) => c.inPie); const totalPie = pieCats.reduce((n: number, c: Category) => n + (totals[c.id] || 0), 0); const actual = Object.fromEntries(pieCats.map((c: Category) => [c.id, totalPie ? (totals[c.id] || 0) / totalPie : 0]));
   const ranked = [...pieCats].filter(c => actual[c.id] > 0).sort((a, b) => actual[b.id] - actual[a.id]); const rows = pieCats.map((c: Category, i: number) => ({ c, intended: i + 1, actualRank: ranked.findIndex(x => x.id === c.id) + 1, gap: actual[c.id] - (shares[c.id] || 0), hours: (totals[c.id] || 0) / 60 }));
-  const daysWithEntries = new Set(visible.map((e: Entry) => new Date(e.start).toDateString())).size;
+  const entryDays = new Set<string>();
+  visible.forEach((entry: Entry) => { const clippedStart = new Date(Math.max(new Date(entry.start).getTime(), rangeStart)); const clippedEnd = new Date(Math.min(new Date(entry.end).getTime(), rangeEnd) - 1); clippedStart.setHours(0, 0, 0, 0); clippedEnd.setHours(0, 0, 0, 0); while (clippedStart <= clippedEnd) { entryDays.add(clippedStart.toDateString()); clippedStart.setDate(clippedStart.getDate() + 1); } });
+  const daysWithEntries = entryDays.size;
   const averagingDays = Math.max(1, daysWithEntries);
   const pieCategoryIds = new Set(pieCats.map((c: Category) => c.id));
   const valueEntries = visible.filter((e: Entry) => pieCategoryIds.has(e.category) || Boolean(e.category2 && pieCategoryIds.has(e.category2)));
@@ -227,7 +232,7 @@ function DriftScreen({ categories, projects, entries, shares, windowDays, setWin
   const coverageDays = windowDays === 0 ? 1 : windowDays === 99999 ? allActivityDays : windowDays;
   const coverage = Math.min(100, Math.round(totalPie / (coverageDays * 720) * 100));
   const projectTotals: Record<string, number> = {};
-  visible.forEach((entry: Entry) => { if (entry.projectId) projectTotals[entry.projectId] = (projectTotals[entry.projectId] || 0) + minutes(entry); });
+  visible.forEach((entry: Entry) => { if (entry.projectId) projectTotals[entry.projectId] = (projectTotals[entry.projectId] || 0) + minutesInRange(entry); });
   const totalProjectMinutes = Object.values(projectTotals).reduce((sum, value) => sum + value, 0);
   const projectRows = projects.map((item: DriftProject) => ({ project: item, minutes: projectTotals[item.id] || 0 })).filter((item: { minutes: number }) => item.minutes > 0).sort((a: { minutes: number }, b: { minutes: number }) => b.minutes - a.minutes);
   const coverageMessage = coverage < 25
