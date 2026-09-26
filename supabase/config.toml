@@ -1,0 +1,5 @@
+project_id = "the-drift"
+
+[functions.mcp]
+# The function uses its own single-user bearer token instead of Supabase JWTs.
+verify_jwt = false

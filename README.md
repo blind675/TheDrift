@@ -47,6 +47,12 @@ corepack pnpm build
 
 Vercel creates a new deployment whenever changes are pushed to the production branch.
 
+## The Drift MCP server
+
+The repository includes a single-user MCP server in [`supabase/functions/mcp`](./supabase/functions/mcp). It runs as a Supabase Edge Function and supports reading summaries and records, creating projects and records, deleting records, and starting or stopping the timer.
+
+It does not use interactive OAuth. Access is protected by one private bearer token, and the Edge Function maps every operation to one configured Supabase user ID. See **[MCP_SETUP.md](./MCP_SETUP.md)** for deployment and client configuration.
+
 ## Environment variables
 
 Create `.env.local` (it is ignored by Git):
