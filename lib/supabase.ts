@@ -135,6 +135,23 @@ export async function createEntry(userId: string, entry: DriftEntry, source: "ma
   return { ...entry, id: data.id };
 }
 
+export async function updateEntry(entry: DriftEntry): Promise<DriftEntry> {
+  const allocations = entry.category2
+    ? [{ category_id: entry.category, weight: entry.weight }, { category_id: entry.category2, weight: 1 - entry.weight }]
+    : [{ category_id: entry.category, weight: 1 }];
+  const { error } = await getSupabase().rpc("update_entry_with_allocations", {
+    p_entry_id: entry.id,
+    p_label: entry.label,
+    p_started_at: entry.start,
+    p_ended_at: entry.end,
+    p_note: entry.note || null,
+    p_project_id: entry.projectId || null,
+    p_allocations: allocations,
+  });
+  if (error) throw error;
+  return entry;
+}
+
 export async function createProject(userId: string, name: string): Promise<DriftProject> {
   const normalizedName = name.trim().replace(/\s+/g, " ");
   if (!normalizedName) throw new Error("Project name cannot be empty.");

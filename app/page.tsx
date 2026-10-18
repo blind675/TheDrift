@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useId, useState } from "react";
 import { deriveTargetShares } from "../lib/compute";
-import { clearRunningTimer, createEntry, createProject, deleteEntry, loadDriftData, requestMagicLink, saveIntent, saveRunningTimer, signOut, subscribeToAuth, type AuthSession, type DriftEntry, type DriftProject, type DriftTimer } from "../lib/supabase";
+import { clearRunningTimer, createEntry, createProject, deleteEntry, loadDriftData, requestMagicLink, saveIntent, saveRunningTimer, signOut, subscribeToAuth, updateEntry, type AuthSession, type DriftEntry, type DriftProject, type DriftTimer } from "../lib/supabase";
 
 type Tab = "log" | "intent" | "drift";
 type Category = { id: string; name: string; color: string; inPie: boolean };
@@ -29,6 +29,7 @@ const fmtTimerElapsed = (milliseconds: number) => { const totalSeconds = Math.ma
 const minutes = (entry: Entry) => Math.max(0, (new Date(entry.end).getTime() - new Date(entry.start).getTime()) / 60000);
 const todayLocal = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); };
 const timeLocal = (offset = 0) => { const d = new Date(Date.now() + offset * 60000); return d.toTimeString().slice(0, 5); };
+const dateTimeLocal = (iso: string) => { const d = new Date(iso); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); };
 
 function Dot({ category, small = false }: { category?: Category; small?: boolean }) {
   return <span className={small ? "dot small" : "dot"} style={{ background: category?.color }} />;
@@ -112,6 +113,7 @@ export default function Home() {
   const move = (index: number, direction: -1 | 1) => { const next = [...categories]; const target = index + direction; if (target < 0 || target >= inPie.length) return; const a = next.findIndex(c => c.id === inPie[index].id), b = next.findIndex(c => c.id === inPie[target].id); [next[a], next[b]] = [next[b], next[a]]; setCategories(next); void persistIntent(next, steepness); };
   const updateSteepness = (value: number) => { setSteepness(value); void persistIntent(categories, value); };
   const addEntry = async (entry: Entry) => { try { const saved = userId ? await createEntry(userId, entry) : entry; setEntries([saved, ...entries]); setShowForm(false); setSyncState(userId ? "synced" : "local"); setToast(userId ? "Saved to Supabase" : "Saved on this device"); } catch (error) { setSyncState("error"); setToast(error instanceof Error ? error.message : "Entry could not be saved"); } setTimeout(() => setToast(""), 2600); };
+  const editEntry = async (entry: Entry) => { try { if (userId) setSyncState("loading"); const saved = userId ? await updateEntry(entry) : entry; setEntries(current => current.map(item => item.id === saved.id ? saved : item).sort((a, b) => new Date(b.start).getTime() - new Date(a.start).getTime())); setSyncState(userId ? "synced" : "local"); setToast(userId ? "Changes saved to Supabase" : "Changes saved on this device"); } catch (error) { setSyncState("error"); setToast(error instanceof Error ? error.message : "Record could not be updated"); throw error; } finally { setTimeout(() => setToast(""), 2600); } };
   const removeEntry = async (entry: Entry) => { if (!window.confirm(`Delete “${entry.label}”? This cannot be undone.`)) return; try { if (userId) await deleteEntry(userId, entry.id); setEntries(current => current.filter(item => item.id !== entry.id)); setSyncState(userId ? "synced" : "local"); setToast("Record deleted"); } catch (error) { setSyncState("error"); setToast(error instanceof Error ? error.message : "Record could not be deleted"); } setTimeout(() => setToast(""), 2600); };
 
   return (
@@ -121,7 +123,7 @@ export default function Home() {
         <div className="top-actions"><span className={`sync ${!online || syncState === "error" ? "offline" : ""}`}><i />{!online ? "Offline" : syncState === "loading" ? "Syncing…" : syncState === "error" ? "Sync issue" : syncState === "synced" ? "Synced" : "Local only"}</span><button className="icon-button" onClick={() => setShowSettings(true)} aria-label="Open settings">•••</button></div>
       </header>
 
-      {tab === "log" && <LogScreen {...{ categories, projects, entries, timer, elapsed, showForm, setShowForm, startTimer, stopTimer, addEntry, removeEntry, category, project, getOrCreateProject }} />}
+      {tab === "log" && <LogScreen {...{ categories, projects, entries, timer, elapsed, showForm, setShowForm, startTimer, stopTimer, addEntry, editEntry, removeEntry, category, project, getOrCreateProject }} />}
       {tab === "intent" && <IntentScreen {...{ inPie, shares, steepness, setSteepness: updateSteepness, move }} />}
       {tab === "drift" && <DriftScreen {...{ categories, projects, entries, shares, windowDays, setWindowDays, category }} />}
 
@@ -135,8 +137,9 @@ export default function Home() {
   );
 }
 
-function LogScreen({ categories, projects, entries, timer, elapsed, showForm, setShowForm, startTimer, stopTimer, addEntry, removeEntry, category, project, getOrCreateProject }: any) {
+function LogScreen({ categories, projects, entries, timer, elapsed, showForm, setShowForm, startTimer, stopTimer, addEntry, editEntry, removeEntry, category, project, getOrCreateProject }: any) {
   const [openMenu, setOpenMenu] = useState<string | null>(null);
+  const [editingEntry, setEditingEntry] = useState<Entry | null>(null);
   const [timerSplit, setTimerSplit] = useState(false);
   const [timerWeight, setTimerWeight] = useState(80);
   const [timerCategory, setTimerCategory] = useState("");
@@ -173,14 +176,15 @@ function LogScreen({ categories, projects, entries, timer, elapsed, showForm, se
     <button className="add-block" onClick={() => setShowForm(!showForm)}><span>＋</span><span><strong>Add a finished block</strong><small>Log something that already happened</small></span><b>{showForm ? "−" : "+"}</b></button>
     {showForm && <EntryForm categories={categories} projects={projects} getOrCreateProject={getOrCreateProject} onAdd={addEntry} />}
     <div className="entries-head"><h2>Recent log</h2><button>View all</button></div>
-    {Object.entries(grouped).map(([day, dayEntries]: any) => <div className="day" key={day}><div className="day-head"><h3>{day}</h3><span>{fmtDuration(dayEntries.reduce((n: number, e: Entry) => n + minutes(e), 0))} logged</span></div>{dayEntries.map((e: Entry) => <article className="entry" key={e.id}><div className="entry-line" style={{ background: category(e.category)?.color }} /><div className="entry-main"><strong>{e.label}</strong><span>{new Date(e.start).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Bucharest" })}–{new Date(e.end).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Bucharest" })} · {fmtDuration(minutes(e))}</span></div><div className="entry-tags"><span><Dot category={category(e.category)} small />{category(e.category)?.name}</span>{e.category2 && <span><Dot category={category(e.category2)} small />{category(e.category2)?.name}</span>}{e.projectId && <span className="project-tag">◆ {project(e.projectId)?.name || "Archived project"}</span>}</div><div className="entry-actions"><button className="entry-menu-trigger" aria-label={`Actions for ${e.label}`} aria-haspopup="menu" aria-expanded={openMenu === e.id} onClick={() => setOpenMenu(openMenu === e.id ? null : e.id)}>•••</button>{openMenu === e.id && <div className="entry-menu" role="menu"><button role="menuitem" onClick={() => { setOpenMenu(null); void removeEntry(e); }}>Delete record</button></div>}</div></article>)}</div>)}
+    {Object.entries(grouped).map(([day, dayEntries]: any) => <div className="day" key={day}><div className="day-head"><h3>{day}</h3><span>{fmtDuration(dayEntries.reduce((n: number, e: Entry) => n + minutes(e), 0))} logged</span></div>{dayEntries.map((e: Entry) => <article className="entry" key={e.id}><div className="entry-line" style={{ background: category(e.category)?.color }} /><div className="entry-main"><strong>{e.label}</strong><span>{new Date(e.start).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Bucharest" })}–{new Date(e.end).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Bucharest" })} · {fmtDuration(minutes(e))}</span></div><div className="entry-tags"><span><Dot category={category(e.category)} small />{category(e.category)?.name}</span>{e.category2 && <span><Dot category={category(e.category2)} small />{category(e.category2)?.name}</span>}{e.projectId && <span className="project-tag">◆ {project(e.projectId)?.name || "Archived project"}</span>}</div><div className="entry-actions"><button className="entry-menu-trigger" aria-label={`Actions for ${e.label}`} aria-haspopup="menu" aria-expanded={openMenu === e.id} onClick={() => setOpenMenu(openMenu === e.id ? null : e.id)}>•••</button>{openMenu === e.id && <div className="entry-menu" role="menu"><button className="edit-record" role="menuitem" onClick={() => { setOpenMenu(null); setEditingEntry(e); }}>Edit record</button><button role="menuitem" onClick={() => { setOpenMenu(null); void removeEntry(e); }}>Delete record</button></div>}</div></article>)}</div>)}
+    {editingEntry && <EditEntryDialog key={editingEntry.id} entry={editingEntry} categories={categories} projects={projects} getOrCreateProject={getOrCreateProject} onClose={() => setEditingEntry(null)} onSave={async (updated: Entry) => { await editEntry(updated); setEditingEntry(null); }} />}
   </section>;
 }
 
-function ProjectField({ projects, name, className = "", compact = false }: { projects: DriftProject[]; name: string; className?: string; compact?: boolean }) {
+function ProjectField({ projects, name, className = "", compact = false, initialValue = "" }: { projects: DriftProject[]; name: string; className?: string; compact?: boolean; initialValue?: string }) {
   const inputId = useId();
   const listId = `${inputId}-list`;
-  const [value, setValue] = useState("");
+  const [value, setValue] = useState(initialValue);
   const [open, setOpen] = useState(false);
   const active = projects.filter(item => !item.archived);
   const matches = active.filter(item => item.name.toLocaleLowerCase().includes(value.trim().toLocaleLowerCase())).slice(0, 6);
@@ -202,6 +206,78 @@ function EntryForm({ categories, projects, getOrCreateProject, onAdd }: { catego
   const [split, setSplit] = useState(false); const [weight, setWeight] = useState(80);
   const submit = async (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); const f = new FormData(event.currentTarget); const date = String(f.get("date")), start = String(f.get("start")), end = String(f.get("end")); let ended = new Date(`${date}T${end}`); const started = new Date(`${date}T${start}`); if (ended <= started) ended.setDate(ended.getDate() + 1); const projectId = await getOrCreateProject(String(f.get("project") || "")); onAdd({ id: crypto.randomUUID(), label: String(f.get("label") || "Untitled"), start: started.toISOString(), end: ended.toISOString(), category: String(f.get("category")), category2: split ? String(f.get("category2")) : undefined, weight: split ? weight / 100 : 1, note: String(f.get("note") || ""), projectId }); };
   return <form className="entry-form" onSubmit={submit}><div className="form-grid"><label className="activity-field">What happened?<input name="label" placeholder="e.g. Park with the kids" required /></label><label className="category-field">Category<select name="category">{categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label><ProjectField projects={projects} name="project" className="project-form-field" /><label className="time-field">Date<input name="date" type="date" defaultValue={todayLocal()} required /></label><label className="time-field">From<input name="start" type="time" defaultValue={timeLocal(-60)} required /></label><label className="time-field">To<input name="end" type="time" defaultValue={timeLocal()} required /></label></div><button type="button" className="text-button" onClick={() => setSplit(!split)}>{split ? "Remove split" : "＋ Split between two categories"}</button>{split && <div className="split-box"><select name="category2">{categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select><label>{weight}/{100-weight}<input type="range" min="10" max="90" step="10" value={weight} onChange={e => setWeight(Number(e.target.value))} /></label>{weight === 50 && <small>Even splits often mean one activity rather than two.</small>}</div>}<label>Note <span>(optional)</span><textarea name="note" placeholder="Anything worth remembering?" /></label><button className="primary-button save" type="submit">Add to log</button></form>;
+}
+
+function EditEntryDialog({ entry, categories, projects, getOrCreateProject, onClose, onSave }: { entry: Entry; categories: Category[]; projects: DriftProject[]; getOrCreateProject: (name: string) => Promise<string | undefined>; onClose: () => void; onSave: (entry: Entry) => Promise<void> }) {
+  const [split, setSplit] = useState(Boolean(entry.category2));
+  const [weight, setWeight] = useState(Math.round((entry.category2 ? entry.weight : .8) * 100));
+  const [primaryCategory, setPrimaryCategory] = useState(entry.category);
+  const [secondaryCategory, setSecondaryCategory] = useState(entry.category2 || categories.find(item => item.id !== entry.category)?.id || "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const initialProject = projects.find(item => item.id === entry.projectId)?.name || "";
+
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape" && !busy) onClose(); };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [busy, onClose]);
+
+  const changePrimaryCategory = (next: string) => {
+    setPrimaryCategory(next);
+    if (next === secondaryCategory) setSecondaryCategory(categories.find(item => item.id !== next)?.id || "");
+  };
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    const form = new FormData(event.currentTarget);
+    try {
+      const label = String(form.get("label") || "").trim();
+      const started = new Date(String(form.get("started-at")));
+      const ended = new Date(String(form.get("ended-at")));
+      if (!label) throw new Error("The activity title cannot be empty.");
+      if (ended <= started) throw new Error("The end time must be later than the start time.");
+      if (ended.getTime() - started.getTime() > 365 * 86400000) throw new Error("An entry cannot be longer than 365 days.");
+      if (split && (!secondaryCategory || secondaryCategory === primaryCategory)) throw new Error("Choose two different categories for a split.");
+      const projectId = await getOrCreateProject(String(form.get("project") || ""));
+      await onSave({
+        ...entry,
+        label,
+        start: started.toISOString(),
+        end: ended.toISOString(),
+        category: primaryCategory,
+        category2: split ? secondaryCategory : undefined,
+        weight: split ? weight / 100 : 1,
+        note: String(form.get("note") || "").trim() || undefined,
+        projectId,
+      });
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "The record could not be updated.");
+      setBusy(false);
+    }
+  };
+
+  return <div className="edit-dialog-backdrop" onMouseDown={() => !busy && onClose()}>
+    <section className="edit-dialog" role="dialog" aria-modal="true" aria-labelledby="edit-entry-title" onMouseDown={event => event.stopPropagation()}>
+      <div className="edit-dialog-head"><div><p className="eyebrow">Recorded activity</p><h2 id="edit-entry-title">Edit record</h2></div><button type="button" onClick={onClose} disabled={busy} aria-label="Close edit dialog">×</button></div>
+      <form className="entry-form edit-entry-form" onSubmit={submit}>
+        <div className="form-grid">
+          <label className="activity-field">What happened?<input name="label" defaultValue={entry.label} maxLength={300} required autoFocus /></label>
+          <label className="category-field">Category<select name="category" value={primaryCategory} onChange={event => changePrimaryCategory(event.target.value)} required>{categories.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+          <ProjectField projects={projects} name="project" className="project-form-field" initialValue={initialProject} />
+          <label className="edit-time-field">Started<input name="started-at" type="datetime-local" defaultValue={dateTimeLocal(entry.start)} required /></label>
+          <label className="edit-time-field">Ended<input name="ended-at" type="datetime-local" defaultValue={dateTimeLocal(entry.end)} required /></label>
+        </div>
+        <button type="button" className="text-button" onClick={() => setSplit(!split)}>{split ? "Remove split" : "＋ Split between two categories"}</button>
+        {split && <div className="split-box"><select aria-label="Second category" value={secondaryCategory} onChange={event => setSecondaryCategory(event.target.value)} required>{categories.filter(item => item.id !== primaryCategory).map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><label>{weight}/{100-weight}<input type="range" min="10" max="90" step="1" value={weight} onChange={event => setWeight(Number(event.target.value))} /></label>{weight === 50 && <small>Even splits often mean one activity rather than two.</small>}</div>}
+        <label>Note <span>(optional)</span><textarea name="note" defaultValue={entry.note || ""} maxLength={5000} placeholder="Anything worth remembering?" /></label>
+        {error && <p className="form-error">{error}</p>}
+        <div className="edit-dialog-actions"><button type="button" className="secondary-button" onClick={onClose} disabled={busy}>Cancel</button><button className="primary-button" type="submit" disabled={busy}>{busy ? "Saving…" : "Save changes"}</button></div>
+      </form>
+    </section>
+  </div>;
 }
 
 function IntentScreen({ inPie, shares, steepness, setSteepness, move }: any) {

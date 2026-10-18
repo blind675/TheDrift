@@ -38,6 +38,17 @@ Older Drift databases limit every entry to 16 hours. To allow a timer to run ove
 
 This raises the safety limit to 365 days. It does not alter existing entries or running timers.
 
+### Enabling record editing
+
+Editing an entry updates the record and replaces its category allocations as one atomic database operation. Existing Drift databases need the accompanying RPC once:
+
+1. Open **SQL Editor → New query** in Supabase.
+2. Copy the complete contents of `supabase/update_entries.sql` into the query.
+3. Press **Run** once.
+4. Reload the deployed app, open a record's **•••** menu, and choose **Edit record**.
+
+The function runs with the signed-in user's permissions, checks ownership explicitly, and is not executable by anonymous users. New databases receive it automatically through `supabase/schema.sql`.
+
 ## 3. Create your private login
 
 1. Open **Authentication → Users**.
@@ -110,5 +121,6 @@ The deployed site must use HTTPS for service-worker installation. Localhost is t
 - **No categories appear**: rerun `seed.sql` with the correct user UUID.
 - **`Could not find the table 'public.projects'` or `project_id` errors**: run `supabase/add_projects.sql` once in the SQL Editor, then reload the app.
 - **`entry_sane_length` error when stopping a long timer**: run `supabase/allow_long_entries.sql` once in the SQL Editor, then press Stop again. The running timer remains available until the entry saves successfully.
+- **`Could not find the function public.update_entry_with_allocations`**: run `supabase/update_entries.sql` once in the SQL Editor, then reload the app. If your project restricts Data API exposure per function, enable this function under **Project Settings → Data API** for the authenticated role.
 - **Schema script says an object already exists**: it has already been run; do not rerun it on the same database.
 - **PWA does not offer installation**: use the deployed HTTPS URL, confirm the manifest loads at `/manifest.webmanifest`, and on iOS use Safari's Share menu.
