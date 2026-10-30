@@ -27,6 +27,12 @@ export type DriftLogData = {
   entries: DriftEntry[];
   timer: DriftTimer | null;
 };
+export type DriftAnalyticsData = {
+  categories: DriftCategory[];
+  projects: DriftProject[];
+  entries: DriftEntry[];
+  steepness: number;
+};
 
 type EntryInput = Omit<DriftEntry, 'id'>;
 
@@ -93,6 +99,97 @@ export async function loadDriftLog(userId: string): Promise<DriftLogData> {
     : null;
 
   return { categories, projects, entries, timer };
+}
+
+export async function loadDriftAnalytics(userId: string): Promise<DriftAnalyticsData> {
+  const client = getSupabase();
+  const [categoriesResult, projectsResult, intentResult, entries] = await Promise.all([
+    client.from('categories').select('id,name,color,in_pie,sort_order').eq('user_id', userId).eq('archived', false).order('sort_order'),
+    client.from('projects').select('id,name,archived').eq('user_id', userId).order('name'),
+    client
+      .from('intent_versions')
+      .select('steepness,intent_ranks(category_id,rank)')
+      .eq('user_id', userId)
+      .order('effective_from', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    loadAllEntries(userId),
+  ]);
+
+  for (const result of [categoriesResult, projectsResult, intentResult]) {
+    if (result.error) throw result.error;
+  }
+
+  const rankByCategory = new Map<string, number>();
+  for (const rank of intentResult.data?.intent_ranks ?? []) {
+    rankByCategory.set(rank.category_id, rank.rank);
+  }
+  const categories = (categoriesResult.data ?? [])
+    .map((row) => ({
+      id: row.id,
+      name: row.name,
+      color: row.color,
+      inPie: row.in_pie,
+      sortOrder: row.sort_order,
+    }))
+    .sort((a, b) => (rankByCategory.get(a.id) ?? 10_000 + a.sortOrder) - (rankByCategory.get(b.id) ?? 10_000 + b.sortOrder))
+    .map(({ sortOrder: _sortOrder, ...category }) => category);
+  const projects: DriftProject[] = (projectsResult.data ?? []).map((row) => ({
+    id: row.id,
+    name: row.name,
+    archived: row.archived,
+  }));
+
+  return {
+    categories,
+    projects,
+    entries,
+    steepness: Number(intentResult.data?.steepness ?? 1),
+  };
+}
+
+async function loadAllEntries(userId: string): Promise<DriftEntry[]> {
+  const client = getSupabase();
+  const pageSize = 1000;
+  const entries: DriftEntry[] = [];
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await client
+      .from('entries')
+      .select('id,label,started_at,ended_at,note,project_id,entry_allocations(category_id,weight)')
+      .eq('user_id', userId)
+      .order('started_at', { ascending: false })
+      .range(from, from + pageSize - 1);
+    if (error) throw error;
+    entries.push(...mapEntryRows(data ?? []));
+    if ((data?.length ?? 0) < pageSize) break;
+  }
+  return entries;
+}
+
+function mapEntryRows(rows: {
+  id: string;
+  label: string | null;
+  started_at: string;
+  ended_at: string;
+  note: string | null;
+  project_id: string | null;
+  entry_allocations: { category_id: string; weight: number | string }[];
+}[]): DriftEntry[] {
+  return rows.flatMap((row) => {
+    const allocations = [...(row.entry_allocations ?? [])].sort((a, b) => Number(b.weight) - Number(a.weight));
+    if (!allocations[0]) return [];
+    return [{
+      id: row.id,
+      label: row.label || 'Untitled',
+      start: row.started_at,
+      end: row.ended_at,
+      category: allocations[0].category_id,
+      category2: allocations[1]?.category_id,
+      weight: Number(allocations[0].weight),
+      note: row.note || undefined,
+      projectId: row.project_id || undefined,
+    }];
+  });
 }
 
 export async function createEntry(userId: string, entry: EntryInput, source: 'manual' | 'timer' = 'manual'): Promise<DriftEntry> {

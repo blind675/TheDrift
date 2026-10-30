@@ -20,13 +20,6 @@ export default function TabsLayout() {
         />
         <NativeTabs.Trigger.Label>Log</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="intent">
-        <NativeTabs.Trigger.Icon
-          src={require('../../../assets/tab-icons/intent.png')}
-          renderingMode="template"
-        />
-        <NativeTabs.Trigger.Label>Intent</NativeTabs.Trigger.Label>
-      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="drift">
         <NativeTabs.Trigger.Icon
           src={require('../../../assets/tab-icons/drift.png')}

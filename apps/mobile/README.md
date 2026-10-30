@@ -6,7 +6,7 @@ Cross-platform Expo/React Native client for The Drift. It shares the existing Su
 
 ### Phase 1 — foundation
 
-- Expo Router navigation for Log, Intent, and Drift
+- Expo Router navigation for Log and Drift
 - Persistent Supabase sessions on iOS and Android
 - HTTPS-to-native magic-link bridge without a custom email template
 - Protected application routes
@@ -20,7 +20,15 @@ Cross-platform Expo/React Native client for The Drift. It shares the existing Su
 - Delete an existing activity with confirmation
 - Timer state persists across app and web sessions
 
-The Intent and Drift interfaces remain placeholders for the next phases.
+### Phase 4 — native Drift
+
+- Today, 7-day, 30-day, and all-activity reporting windows
+- Rank movement and share gaps using the Intent configured on the web
+- Discretionary coverage based on 12 available hours per day, excluding Maintenance
+- Cross-midnight and reporting-window clipping for every activity
+- Maintenance hours per logged day and project-time statistics
+
+Intent editing remains available on the web and is intentionally omitted from the mobile navigation.
 
 ## Local setup
 
