@@ -19,7 +19,6 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(isSupabaseConfigured);
   const [authError, setAuthError] = useState<string | null>(null);
-  const linkingUrl = Linking.useLinkingURL();
   const processedUrl = useRef<string | null>(null);
 
   useEffect(() => {
@@ -43,16 +42,36 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!linkingUrl || processedUrl.current === linkingUrl || !isSupabaseConfigured) return;
-    if (!linkingUrl.includes('auth/callback')) return;
+    if (!isSupabaseConfigured) return;
 
-    processedUrl.current = linkingUrl;
-    void completeAuthFromUrl(linkingUrl)
-      .catch((error: unknown) => {
-        setAuthError(error instanceof Error ? error.message : 'The sign-in link could not be completed.');
-      })
-      .finally(() => setLoading(false));
-  }, [linkingUrl]);
+    let mounted = true;
+    const handleUrl = (url: string | null) => {
+      if (!mounted || !url || processedUrl.current === url || !url.includes('auth/callback')) return;
+
+      processedUrl.current = url;
+      setAuthError(null);
+      void completeAuthFromUrl(url)
+        .catch((error: unknown) => {
+          if (!mounted) return;
+          setAuthError(error instanceof Error ? error.message : 'The sign-in link could not be completed.');
+        })
+        .finally(() => {
+          if (mounted) setLoading(false);
+        });
+    };
+
+    void Linking.getInitialURL().then(handleUrl).catch((error: unknown) => {
+      if (mounted) {
+        setAuthError(error instanceof Error ? error.message : 'The sign-in link could not be read.');
+      }
+    });
+    const subscription = Linking.addEventListener('url', ({ url }) => handleUrl(url));
+
+    return () => {
+      mounted = false;
+      subscription.remove();
+    };
+  }, []);
 
   const sendMagicLink = useCallback(async (email: string) => {
     setAuthError(null);

@@ -17,9 +17,12 @@ function createSafeAppUrl(): BridgeState {
       return { status: "error", message: "The mobile callback is not allowed." };
     }
 
-    // The implicit Auth flow returns the session in the fragment. Fragments
-    // are never sent to Vercel; this client-only page passes it to the app.
-    target.hash = window.location.hash;
+    // Supabase returns the implicit-flow session in the fragment. Browser
+    // fragments are not consistently delivered when Safari opens Expo Go, so
+    // copy the values into the native deep link's query string instead.
+    const authParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    for (const [key, value] of authParams) target.searchParams.set(key, value);
+    target.hash = "";
     return { status: "opening", appUrl: target.toString() };
   } catch {
     return { status: "error", message: "The mobile callback is invalid." };

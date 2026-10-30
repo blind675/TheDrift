@@ -26,25 +26,29 @@ export async function requestMagicLink(email: string): Promise<void> {
 
 export async function completeAuthFromUrl(url: string): Promise<void> {
   const callback = new URL(url);
-  const errorDescription = callback.searchParams.get('error_description');
+  const hash = new URLSearchParams(callback.hash.replace(/^#/, ''));
+  const errorDescription = callback.searchParams.get('error_description') ?? hash.get('error_description');
   if (errorDescription) throw new Error(errorDescription);
 
-  const code = callback.searchParams.get('code');
+  const errorCode = callback.searchParams.get('error_code') ?? hash.get('error_code');
+  if (errorCode) throw new Error(`The sign-in link failed: ${errorCode}.`);
+
+  const code = callback.searchParams.get('code') ?? hash.get('code');
   if (code) {
     const { error } = await getSupabase().auth.exchangeCodeForSession(code);
     if (error) throw error;
     return;
   }
 
-  const hash = new URLSearchParams(callback.hash.replace(/^#/, ''));
   const accessToken = callback.searchParams.get('access_token') ?? hash.get('access_token');
   const refreshToken = callback.searchParams.get('refresh_token') ?? hash.get('refresh_token');
   if (accessToken && refreshToken) {
-    const { error } = await getSupabase().auth.setSession({
+    const { data, error } = await getSupabase().auth.setSession({
       access_token: accessToken,
       refresh_token: refreshToken,
     });
     if (error) throw error;
+    if (!data.session) throw new Error('Supabase did not return a session for this sign-in link.');
     return;
   }
 

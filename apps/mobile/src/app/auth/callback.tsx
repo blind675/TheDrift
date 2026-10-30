@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -10,17 +10,25 @@ import { useSession } from '@/providers/session-provider';
 export default function AuthCallbackScreen() {
   const theme = useTheme();
   const { session, loading, authError } = useSession();
+  const [timedOut, setTimedOut] = useState(false);
 
   useEffect(() => {
     if (session && !loading) router.replace('/');
   }, [loading, session]);
 
+  useEffect(() => {
+    const timeout = setTimeout(() => setTimedOut(true), 15_000);
+    return () => clearTimeout(timeout);
+  }, []);
+
+  const callbackError = authError ?? (timedOut ? 'The app did not receive the session from the sign-in link.' : null);
+
   return (
     <View style={[styles.page, { backgroundColor: theme.background }]}>
-      {authError ? (
+      {callbackError ? (
         <>
           <ThemedText style={styles.title}>The link could not sign you in.</ThemedText>
-          <ThemedText themeColor="textSecondary">{authError}</ThemedText>
+          <ThemedText themeColor="textSecondary">{callbackError}</ThemedText>
           <ThemedText onPress={() => router.replace('/sign-in')} style={{ color: theme.accent }}>
             Request another link
           </ThemedText>
