@@ -17,7 +17,10 @@ export function Screen({ eyebrow, title, description, children }: ScreenProps) {
   const theme = useTheme();
 
   return (
-    <ScrollView style={{ backgroundColor: theme.background }} contentContainerStyle={styles.scrollContent}>
+    <ScrollView
+      style={{ backgroundColor: theme.background }}
+      contentContainerStyle={styles.scrollContent}
+      keyboardShouldPersistTaps="handled">
       <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
         <View style={styles.header}>
           {eyebrow ? <ThemedText style={[styles.eyebrow, { color: theme.accent }]}>{eyebrow}</ThemedText> : null}

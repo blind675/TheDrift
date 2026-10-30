@@ -2,15 +2,25 @@
 
 Cross-platform Expo/React Native client for The Drift. It shares the existing Supabase project with the web PWA.
 
-## Current phase
+## Implemented phases
+
+### Phase 1 — foundation
 
 - Expo Router navigation for Log, Intent, and Drift
 - Persistent Supabase sessions on iOS and Android
 - HTTPS-to-native magic-link bridge without a custom email template
 - Protected application routes
-- Read-only connection check against categories, projects, and entries
 
-The logging, timer, Intent, and Drift interfaces are placeholders for the next phases.
+### Phase 2 — native logging
+
+- Live categories, projects, recent entries, and running timer from Supabase
+- Start and stop a timer with project and one- or two-category allocation
+- Add finished activities with date, time, notes, project, and category allocation
+- Create a project while logging when the typed project does not exist
+- Delete an existing activity with confirmation
+- Timer state persists across app and web sessions
+
+The Intent and Drift interfaces remain placeholders for the next phases.
 
 ## Local setup
 
