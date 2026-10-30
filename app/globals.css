@@ -25,3 +25,71 @@
 .entry-menu .edit-record{color:var(--ink)}
 .edit-dialog-backdrop{position:fixed;inset:0;z-index:55;display:grid;place-items:center;padding:24px;background:#111a;backdrop-filter:blur(5px)}.edit-dialog{width:min(760px,100%);max-height:min(860px,calc(100vh - 48px));overflow:auto;background:var(--card);border:1px solid var(--line);border-radius:22px;padding:26px;box-shadow:0 28px 90px #0005}.edit-dialog-head{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:22px}.edit-dialog-head h2{font:500 34px/1 "Newsreader",serif;margin:0}.edit-dialog-head>button{width:40px;height:40px;border:0;border-radius:50%;background:var(--paper);font-size:27px;line-height:1}.edit-entry-form{margin:0;padding:0;border:0;border-radius:0;box-shadow:none;background:transparent}.edit-entry-form .edit-time-field{grid-column:span 4}.edit-dialog-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}.secondary-button{min-height:54px;padding:0 24px;border:1px solid var(--line);border-radius:14px;background:transparent;color:var(--ink);font-weight:700}.secondary-button:disabled{opacity:.55;cursor:wait}
 @media(max-width:760px){.edit-dialog-backdrop{padding:0;align-items:end}.edit-dialog{max-height:92vh;border-radius:20px 20px 0 0;padding:21px}.edit-entry-form .edit-time-field{grid-column:1/-1}.edit-dialog-actions{display:grid;grid-template-columns:1fr 1fr}.edit-dialog-actions button{width:100%;padding:0 12px}}
+/* Native authentication bridge */
+.mobile-auth-page {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #f2f0e9;
+  color: #242520;
+}
+
+.mobile-auth-card {
+  width: min(100%, 440px);
+  padding: 36px;
+  border: 1px solid #dfd9cd;
+  border-radius: 28px;
+  background: #fffcf6;
+  box-shadow: 0 24px 70px rgb(36 37 32 / 10%);
+  text-align: center;
+}
+
+.mobile-auth-mark {
+  width: 52px;
+  height: 52px;
+  margin: 0 auto 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 15px;
+  background: #242621;
+  color: #f8f4ec;
+  font-family: Georgia, serif;
+  font-size: 32px;
+  font-weight: 700;
+}
+
+.mobile-auth-eyebrow {
+  margin: 0 0 12px;
+  color: #da5b42;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.mobile-auth-card h1 {
+  margin: 0 0 12px;
+  font-family: Georgia, serif;
+  font-size: clamp(32px, 8vw, 46px);
+  line-height: 1.05;
+}
+
+.mobile-auth-card p:not(.mobile-auth-eyebrow) {
+  margin: 0 0 24px;
+  color: #77786f;
+  line-height: 1.55;
+}
+
+.mobile-auth-button {
+  display: inline-flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 22px;
+  border-radius: 999px;
+  background: #da5b42;
+  color: #fff;
+  font-weight: 700;
+  text-decoration: none;
+}
