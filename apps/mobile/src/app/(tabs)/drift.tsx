@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
 import { Screen } from '@/components/screen';
@@ -24,9 +25,11 @@ export default function DriftScreen() {
   const [window, setWindow] = useState<DriftWindow>('7days');
   const [calculatedAt, setCalculatedAt] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!userId) return;
+    setRefreshing(true);
     setError(null);
     try {
       const next = await loadDriftAnalytics(userId);
@@ -34,13 +37,14 @@ export default function DriftScreen() {
       setCalculatedAt(Date.now());
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Your Drift report could not be loaded.');
+    } finally {
+      setRefreshing(false);
     }
   }, [userId]);
 
-  useEffect(() => {
-    const timeout = setTimeout(() => void refresh(), 0);
-    return () => clearTimeout(timeout);
-  }, [refresh]);
+  useFocusEffect(useCallback(() => {
+    void refresh();
+  }, [refresh]));
 
   const report = useMemo(
     () => data && calculatedAt ? buildDriftReport(data, window, calculatedAt) : null,
@@ -51,7 +55,9 @@ export default function DriftScreen() {
     <Screen
       eyebrow="Intent, meet reality"
       title="Your drift"
-      description="See how your logged time compares with the intent you set on the web.">
+      description="See how your logged time compares with the intent you set on the web."
+      refreshing={refreshing}
+      onRefresh={() => void refresh()}>
       <View style={[styles.segmented, { backgroundColor: theme.backgroundSelected }]}>
         {windows.map((item) => (
           <Pressable

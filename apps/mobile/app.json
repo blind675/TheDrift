@@ -8,9 +8,16 @@
     "scheme": "thedrift",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/images/icon.png"
+      "icon": "./assets/images/icon.png",
+      "bundleIdentifier": "com.catalinandreibora.thedrift",
+      "buildNumber": "1",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
+      "package": "com.catalinandreibora.thedrift",
+      "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#F2F0E9",
         "foregroundImage": "./assets/images/android-icon-foreground.png",

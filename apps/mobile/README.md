@@ -28,6 +28,14 @@ Cross-platform Expo/React Native client for The Drift. It shares the existing Su
 - Cross-midnight and reporting-window clipping for every activity
 - Maintenance hours per logged day and project-time statistics
 
+### Phase 5 — production polish and release readiness
+
+- Account sheet with the signed-in email, web-app shortcut, and sign out
+- Pull-to-refresh on Log and Drift, plus an automatic refresh whenever a tab regains focus
+- Native iOS and Android application identifiers and build versions
+- EAS preview, production-build, and store-submission profiles
+- Light and dark themes, mobile empty/error/loading states, and accessible control labels
+
 Intent editing remains available on the web and is intentionally omitted from the mobile navigation.
 
 ## Local setup
@@ -42,3 +50,20 @@ Supabase redirects to the HTTPS bridge. The bridge forwards the session to Expo 
 ## Checks
 
 Run `pnpm mobile:check` from the repository root.
+
+## Create an installable build
+
+The app identifiers are `com.catalinandreibora.thedrift` on both platforms. Change them in `app.json` before the first store build if you want a different permanent identifier.
+
+1. Commit the project, then open the mobile directory: `cd apps/mobile`.
+2. Sign in to Expo: `npx eas-cli@latest login`.
+3. Link or create the EAS project: `pnpm eas:configure`. This adds the Expo project ID to `app.json`.
+4. In the Expo project dashboard, add these variables to both the **preview** and **production** environments:
+   - `EXPO_PUBLIC_SUPABASE_URL`
+   - `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+   - `EXPO_PUBLIC_WEB_URL=https://the-drift-five.vercel.app`
+5. Create an internally installable build with `pnpm eas:preview`.
+6. After testing that build, create store binaries with `pnpm eas:build`.
+7. Upload the finished binaries with `pnpm eas:submit`. EAS will prompt for the Apple and Google developer-account credentials it needs.
+
+The local `.env` is intentionally ignored by Git and is not uploaded to EAS. `EXPO_PUBLIC_*` values are embedded in the application bundle, so use only the Supabase project URL and publishable key—never a secret or service-role key.

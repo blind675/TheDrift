@@ -43,7 +43,11 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
-    "check": "pnpm lint && pnpm typecheck"
+    "check": "pnpm lint && pnpm typecheck",
+    "eas:configure": "npx eas-cli@latest build:configure",
+    "eas:preview": "npx eas-cli@latest build --profile preview --platform all",
+    "eas:build": "npx eas-cli@latest build --profile production --platform all",
+    "eas:submit": "npx eas-cli@latest submit --profile production --platform all"
   },
   "private": true
 }

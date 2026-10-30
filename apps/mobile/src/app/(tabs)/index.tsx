@@ -1,3 +1,4 @@
+import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -41,6 +42,7 @@ export default function LogScreen() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [showFinished, setShowFinished] = useState(false);
   const [timerLabel, setTimerLabel] = useState('');
   const [timerCategory, setTimerCategory] = useState('');
@@ -52,6 +54,7 @@ export default function LogScreen() {
 
   const refresh = useCallback(async () => {
     if (!userId) return;
+    setRefreshing(true);
     setError(null);
     try {
       const next = await loadDriftLog(userId);
@@ -60,13 +63,14 @@ export default function LogScreen() {
       setTimerCategory2((current) => current || next.categories[1]?.id || '');
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Your log could not be loaded.');
+    } finally {
+      setRefreshing(false);
     }
   }, [userId]);
 
-  useEffect(() => {
-    const timeout = setTimeout(() => void refresh(), 0);
-    return () => clearTimeout(timeout);
-  }, [refresh]);
+  useFocusEffect(useCallback(() => {
+    void refresh();
+  }, [refresh]));
 
   useEffect(() => {
     if (!data?.timer) return;
@@ -205,7 +209,9 @@ export default function LogScreen() {
     <Screen
       eyebrow={`Today · ${new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'long' })}`}
       title="Where did your time go?"
-      description="Log what happened. No targets, no verdicts.">
+      description="Log what happened. No targets, no verdicts."
+      refreshing={refreshing}
+      onRefresh={() => void refresh()}>
       {!data && !error ? <ActivityIndicator color={theme.accent} size="large" /> : null}
       {error ? <Notice text={error} tone="error" onDismiss={() => setError(null)} /> : null}
       {message ? <Notice text={message} tone="success" onDismiss={() => setMessage(null)} /> : null}
