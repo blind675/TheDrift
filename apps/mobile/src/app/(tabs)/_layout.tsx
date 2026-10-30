@@ -14,12 +14,24 @@ export default function TabsLayout() {
       tintColor={colors.accent}
       labelStyle={{ default: { color: colors.textSecondary }, selected: { color: colors.text } }}>
       <NativeTabs.Trigger name="index">
+        <NativeTabs.Trigger.Icon
+          src={require('../../../assets/tab-icons/log.png')}
+          renderingMode="template"
+        />
         <NativeTabs.Trigger.Label>Log</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="intent">
+        <NativeTabs.Trigger.Icon
+          src={require('../../../assets/tab-icons/intent.png')}
+          renderingMode="template"
+        />
         <NativeTabs.Trigger.Label>Intent</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="drift">
+        <NativeTabs.Trigger.Icon
+          src={require('../../../assets/tab-icons/drift.png')}
+          renderingMode="template"
+        />
         <NativeTabs.Trigger.Label>Drift</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
     </NativeTabs>
