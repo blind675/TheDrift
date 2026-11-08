@@ -1,0 +1,110 @@
+name: Mobile cloud build
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Cloud build to create
+        required: true
+        default: ios-preview
+        type: choice
+        options:
+          - ios-preview
+          - ios-production
+          - android-preview
+          - ios-simulator
+          - production-all
+      submit:
+        description: Submit production builds to the configured stores
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-cloud-build
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Validate and trigger Expo Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.29.1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Set up Expo CLI
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate mobile app
+        run: pnpm mobile:check
+
+      - name: Trigger Expo cloud build
+        working-directory: apps/mobile
+        env:
+          BUILD_TARGET: ${{ inputs.target }}
+          SUBMIT_BUILD: ${{ inputs.submit }}
+        run: |
+          set -euo pipefail
+
+          case "$BUILD_TARGET" in
+            ios-preview)
+              if [ "$SUBMIT_BUILD" = "true" ]; then
+                echo "Preview builds cannot be submitted to the App Store."
+                exit 1
+              fi
+              eas build --platform ios --profile preview --non-interactive --no-wait
+              ;;
+            ios-production)
+              if [ "$SUBMIT_BUILD" = "true" ]; then
+                eas build --platform ios --profile production --auto-submit-with-profile production --non-interactive --no-wait
+              else
+                eas build --platform ios --profile production --non-interactive --no-wait
+              fi
+              ;;
+            android-preview)
+              if [ "$SUBMIT_BUILD" = "true" ]; then
+                echo "Preview builds cannot be submitted to an app store."
+                exit 1
+              fi
+              eas build --platform android --profile preview-android --non-interactive --no-wait
+              ;;
+            ios-simulator)
+              if [ "$SUBMIT_BUILD" = "true" ]; then
+                echo "Simulator builds cannot be submitted to the App Store."
+                exit 1
+              fi
+              eas build --platform ios --profile preview-ios-simulator --non-interactive --no-wait
+              ;;
+            production-all)
+              if [ "$SUBMIT_BUILD" = "true" ]; then
+                eas build --platform all --profile production --auto-submit-with-profile production --non-interactive --no-wait
+              else
+                eas build --platform all --profile production --non-interactive --no-wait
+              fi
+              ;;
+            *)
+              echo "Unknown build target: $BUILD_TARGET"
+              exit 1
+              ;;
+          esac

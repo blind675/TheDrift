@@ -10,14 +10,12 @@
     "ios": {
       "icon": "./assets/images/icon.png",
       "bundleIdentifier": "com.catalinandreibora.thedrift",
-      "buildNumber": "1",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
       "package": "com.catalinandreibora.thedrift",
-      "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#F2F0E9",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -43,6 +41,16 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {
+        "asyncRoutes": {
+          "web": true
+        }
+      },
+      "eas": {
+        "projectId": "f2492c7c-a948-43f7-b538-d559200505b1"
+      }
     }
   }
 }

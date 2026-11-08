@@ -46,8 +46,13 @@
     "check": "pnpm lint && pnpm typecheck",
     "eas:configure": "npx eas-cli@latest build:configure",
     "eas:preview": "npx eas-cli@latest build --profile preview --platform all",
+    "eas:preview:android": "npx eas-cli@latest build --profile preview-android --platform android",
+    "eas:preview:ios": "npx eas-cli@latest build --profile preview --platform ios",
+    "eas:preview:ios-simulator": "npx eas-cli@latest build --profile preview-ios-simulator --platform ios",
     "eas:build": "npx eas-cli@latest build --profile production --platform all",
-    "eas:submit": "npx eas-cli@latest submit --profile production --platform all"
+    "eas:build:ios": "npx eas-cli@latest build --profile production --platform ios",
+    "eas:submit": "npx eas-cli@latest submit --profile production --platform all",
+    "eas:submit:ios": "npx eas-cli@latest submit --profile production --platform ios"
   },
   "private": true
 }

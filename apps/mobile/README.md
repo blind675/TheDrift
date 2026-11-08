@@ -53,6 +53,8 @@ Run `pnpm mobile:check` from the repository root.
 
 ## Create an installable build
 
+See [DEPLOYMENT.md](./DEPLOYMENT.md) for the complete free-plan setup, GitHub Actions configuration, cloud-build commands, and app-store requirements.
+
 The app identifiers are `com.catalinandreibora.thedrift` on both platforms. Change them in `app.json` before the first store build if you want a different permanent identifier.
 
 1. Commit the project, then open the mobile directory: `cd apps/mobile`.
@@ -62,7 +64,7 @@ The app identifiers are `com.catalinandreibora.thedrift` on both platforms. Chan
    - `EXPO_PUBLIC_SUPABASE_URL`
    - `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
    - `EXPO_PUBLIC_WEB_URL=https://the-drift-five.vercel.app`
-5. Create an internally installable build with `pnpm eas:preview`.
+5. Create a physical-iPhone preview with `pnpm eas:preview:ios`, an iOS Simulator build with `pnpm eas:preview:ios-simulator`, or an installable Android APK with `pnpm eas:preview:android`.
 6. After testing that build, create store binaries with `pnpm eas:build`.
 7. Upload the finished binaries with `pnpm eas:submit`. EAS will prompt for the Apple and Google developer-account credentials it needs.
 
