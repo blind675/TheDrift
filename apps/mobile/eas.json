@@ -7,7 +7,11 @@
     "preview": {
       "distribution": "internal",
       "environment": "preview",
-      "node": "24.22.1"
+      "node": "24.22.1",
+      "pnpm": "10.29.1",
+      "env": {
+        "SHARP_IGNORE_GLOBAL_LIBVIPS": "1"
+      }
     },
     "preview-android": {
       "extends": "preview",
@@ -24,7 +28,11 @@
     "production": {
       "autoIncrement": true,
       "environment": "production",
-      "node": "24.22.1"
+      "node": "24.22.1",
+      "pnpm": "10.29.1",
+      "env": {
+        "SHARP_IGNORE_GLOBAL_LIBVIPS": "1"
+      }
     }
   },
   "submit": {
