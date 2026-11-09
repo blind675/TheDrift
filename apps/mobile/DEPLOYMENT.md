@@ -52,8 +52,8 @@ This build runs only in the iOS Simulator on a Mac; it cannot be installed on a 
 ## Enable GitHub cloud builds
 
 1. Create a personal access token at <https://expo.dev/accounts/[account]/settings/access-tokens>. Limit it to the Expo account that owns this project when that option is available.
-2. Open the GitHub repository, then go to **Settings → Secrets and variables → Actions**.
-3. Create a repository secret named `EXPO_TOKEN` and paste the token.
+2. Open the GitHub repository, then go to **Settings → Environments → Production → Environment secrets**.
+3. Create an environment secret named `EXPO_TOKEN` and paste the token. The deployment job is assigned to the `Production` environment so this secret is available to Expo CLI.
 4. Commit and push `app.json`, `eas.json`, and the workflows in `.github/workflows/`.
 5. Open the repository's **Actions** tab and select **Mobile cloud build**.
 6. Choose **Run workflow**, then select one of:
@@ -73,7 +73,7 @@ Every push to `main` automatically runs the **Mobile cloud build and TestFlight*
 2. Starts an iOS `production` build on Expo Build.
 3. Automatically submits a successful build to App Store Connect and TestFlight.
 
-The pipeline authenticates to Expo with the GitHub repository secret `EXPO_TOKEN`. Expo stores the App Store Connect API key securely in its credentials service; the private Apple key is not committed to GitHub. The public App Store Connect application identifier is configured as `submit.production.ios.ascAppId` in `eas.json`.
+The pipeline authenticates to Expo with the `EXPO_TOKEN` secret in the GitHub `Production` environment. Expo stores the App Store Connect API key securely in its credentials service; the private Apple key is not committed to GitHub. The public App Store Connect application identifier is configured as `submit.production.ios.ascAppId` in `eas.json`.
 
 The automatic iOS submission uploads the build to TestFlight. Apple App Store review and public release remain manual actions in App Store Connect.
 

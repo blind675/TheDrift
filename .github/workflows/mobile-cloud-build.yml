@@ -33,6 +33,9 @@ jobs:
   build:
     name: Validate and trigger Expo Build
     runs-on: ubuntu-latest
+    environment: Production
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v5
@@ -54,6 +57,9 @@ jobs:
         with:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Verify Expo authentication
+        run: eas whoami
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
