@@ -1,6 +1,6 @@
 # Mobile cloud builds and deployment
 
-The repository uses Expo Build for signed cloud builds and GitHub Actions for CI/CD orchestration. A paid Expo plan is not required. The workflows deliberately do not create a native cloud build on every commit, so the free-plan build allowance is only used when you explicitly start one.
+The repository uses Expo Build for signed cloud builds and GitHub Actions for CI/CD orchestration. A paid Expo plan is not required.
 
 ## What can be built without other paid accounts
 
@@ -65,6 +65,18 @@ This build runs only in the iOS Simulator on a Mac; it cannot be installed on a 
 
 The workflow validates the application, sends the source to Expo Build, prints the Expo dashboard URL, and exits without occupying GitHub's runner while the native build continues.
 
+## Automatic iOS TestFlight pipeline
+
+Every push to `main` automatically runs the **Mobile cloud build and TestFlight** workflow. It:
+
+1. Installs the locked dependencies and validates the mobile application.
+2. Starts an iOS `production` build on Expo Build.
+3. Automatically submits a successful build to App Store Connect and TestFlight.
+
+The pipeline authenticates to Expo with the GitHub repository secret `EXPO_TOKEN`. Expo stores the App Store Connect API key securely in its credentials service; the private Apple key is not committed to GitHub. The public App Store Connect application identifier is configured as `submit.production.ios.ascAppId` in `eas.json`.
+
+The automatic iOS submission uploads the build to TestFlight. Apple App Store review and public release remain manual actions in App Store Connect.
+
 ## Production store builds
 
 Production binaries can be created with:
@@ -85,5 +97,6 @@ The GitHub cloud-build workflow has an optional **Submit production builds** che
 ## CI behavior
 
 - Pull requests and pushes affecting the mobile project run lint, TypeScript, and Android/iOS bundle checks in GitHub Actions.
-- Native Expo cloud builds run only through the manually triggered **Mobile cloud build** workflow.
+- Every push to `main` starts an iOS production build and submits it to TestFlight after the validation job passes.
+- The **Mobile cloud build and TestFlight** workflow can also be started manually for preview, simulator, Android, or production builds.
 - Local `.env` files are ignored and are never uploaded by GitHub Actions. Expo injects the preview or production environment configured in its dashboard.

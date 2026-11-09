@@ -1,6 +1,8 @@
-name: Mobile cloud build
+name: Mobile cloud build and TestFlight
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       target:
@@ -62,8 +64,8 @@ jobs:
       - name: Trigger Expo cloud build
         working-directory: apps/mobile
         env:
-          BUILD_TARGET: ${{ inputs.target }}
-          SUBMIT_BUILD: ${{ inputs.submit }}
+          BUILD_TARGET: ${{ github.event_name == 'push' && 'ios-production' || inputs.target }}
+          SUBMIT_BUILD: ${{ github.event_name == 'push' && 'true' || inputs.submit }}
         run: |
           set -euo pipefail
 
