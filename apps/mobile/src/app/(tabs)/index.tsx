@@ -52,6 +52,15 @@ export default function LogScreen() {
   const [timerWeight, setTimerWeight] = useState(80);
   const [now, setNow] = useState(0);
 
+  const resetTimerDraft = () => {
+    setTimerLabel('');
+    setTimerCategory('');
+    setTimerCategory2('');
+    setTimerProject('');
+    setTimerSplit(false);
+    setTimerWeight(80);
+  };
+
   const refresh = useCallback(async () => {
     if (!userId) return;
     setRefreshing(true);
@@ -59,8 +68,6 @@ export default function LogScreen() {
     try {
       const next = await loadDriftLog(userId);
       setData(next);
-      setTimerCategory((current) => current || next.categories[0]?.id || '');
-      setTimerCategory2((current) => current || next.categories[1]?.id || '');
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Your log could not be loaded.');
     } finally {
@@ -108,7 +115,7 @@ export default function LogScreen() {
   const startTimer = async () => {
     if (!data || !userId || busy) return;
     const label = timerLabel.trim();
-    const category = timerCategory || data.categories[0]?.id;
+    const category = timerCategory;
     if (!label || !category) {
       setError('Add an activity title and category before starting.');
       return;
@@ -132,7 +139,7 @@ export default function LogScreen() {
       };
       await saveRunningTimer(userId, timer);
       setData((current) => current ? { ...current, timer } : current);
-      setTimerLabel('');
+      resetTimerDraft();
       setMessage('Timer started and synced.');
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'The timer could not be started.');
@@ -158,6 +165,7 @@ export default function LogScreen() {
       }, 'timer');
       await clearRunningTimer(userId);
       setData((current) => current ? { ...current, timer: null, entries: [saved, ...current.entries] } : current);
+      resetTimerDraft();
       setMessage('Activity added to your log.');
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'The timer could not be stopped.');
@@ -242,7 +250,7 @@ export default function LogScreen() {
           <FieldLabel label="Category" dark>
             <ChoiceRow
               items={data.categories}
-              selectedId={timerCategory || data.categories[0]?.id}
+              selectedId={timerCategory}
               onSelect={setTimerCategory}
               dark
             />

@@ -10,5 +10,5 @@ export function weightedMinutes(startedAt: string, endedAt: string, weight = 1):
 }
 
 export function coverage(totalLoggedMinutes: number, days: number): number {
-  return days <= 0 ? 0 : totalLoggedMinutes / (days * 16 * 60);
+  return days <= 0 ? 0 : totalLoggedMinutes / (days * 24 * 60);
 }

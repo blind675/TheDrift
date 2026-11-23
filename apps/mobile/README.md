@@ -24,7 +24,7 @@ Cross-platform Expo/React Native client for The Drift. It shares the existing Su
 
 - Today, 7-day, 30-day, and all-activity reporting windows
 - Rank movement and share gaps using the Intent configured on the web
-- Discretionary coverage based on 12 available hours per day, excluding Maintenance
+- Full-day coverage based on all 24 hours per day, including Maintenance
 - Cross-midnight and reporting-window clipping for every activity
 - Maintenance hours per logged day and project-time statistics
 

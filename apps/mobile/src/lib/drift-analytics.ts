@@ -96,15 +96,14 @@ export function buildDriftReport(data: DriftAnalyticsData, window: DriftWindow, 
   const maintenance = data.categories.find((category) => category.name.toLocaleLowerCase() === 'maintenance');
   const maintenanceMinutes = maintenance ? totals[maintenance.id] ?? 0 : 0;
 
-  const valueCategoryIds = new Set(valueCategories.map((category) => category.id));
-  const valueEntries = visible.filter((entry) => valueCategoryIds.has(entry.category) || Boolean(entry.category2 && valueCategoryIds.has(entry.category2)));
-  const firstValueDay = valueEntries.length
-    ? new Date(Math.min(...valueEntries.map((entry) => Math.max(new Date(entry.start).getTime(), rangeStart))))
+  const firstActivityDay = visible.length
+    ? new Date(Math.min(...visible.map((entry) => Math.max(new Date(entry.start).getTime(), rangeStart))))
     : new Date(todayStart);
-  firstValueDay.setHours(0, 0, 0, 0);
-  const allActivityDays = Math.max(1, Math.round((todayStart.getTime() - firstValueDay.getTime()) / 86_400_000) + 1);
+  firstActivityDay.setHours(0, 0, 0, 0);
+  const allActivityDays = Math.max(1, Math.round((todayStart.getTime() - firstActivityDay.getTime()) / 86_400_000) + 1);
   const coverageDays = window === 'today' ? 1 : window === '7days' ? 7 : window === '30days' ? 30 : allActivityDays;
-  const coverage = Math.min(100, Math.round(discretionaryMinutes / (coverageDays * 720) * 100));
+  const totalLoggedMinutes = coveredMinutes(visible, rangeStart, now);
+  const coverage = Math.min(100, Math.round(totalLoggedMinutes / (coverageDays * 1440) * 100));
 
   const projectTotals: Record<string, number> = {};
   for (const entry of visible) {
@@ -121,10 +120,10 @@ export function buildDriftReport(data: DriftAnalyticsData, window: DriftWindow, 
     .sort((a, b) => b.minutes - a.minutes);
 
   const coverageMessage = coverage < 25
-    ? `You logged ${coverage}% of the 12 discretionary hours available per day. Maintenance is excluded, so rank movement is more reliable than exact hour comparisons while coverage is light.`
+    ? `You accounted for ${coverage}% of the full 24 hours per day, including Maintenance. Rank movement is more reliable than exact hour comparisons while coverage is light.`
     : coverage < 70
-      ? `You logged ${coverage}% of the 12 discretionary hours available per day. Maintenance is excluded. Share gaps are useful, but some discretionary time remains untracked.`
-      : `You logged ${coverage}% of the 12 discretionary hours available per day. Maintenance is excluded, giving this comparison strong coverage.`;
+      ? `You accounted for ${coverage}% of the full 24 hours per day, including Maintenance. Share gaps are useful, but some time remains untracked.`
+      : `You accounted for ${coverage}% of the full 24 hours per day, including Maintenance, giving this comparison strong coverage.`;
 
   return {
     rows,
@@ -136,6 +135,29 @@ export function buildDriftReport(data: DriftAnalyticsData, window: DriftWindow, 
     coverage,
     coverageMessage,
   };
+}
+
+function coveredMinutes(entries: DriftEntry[], rangeStart: number, rangeEnd: number) {
+  const ranges = entries
+    .map((entry) => [
+      Math.max(new Date(entry.start).getTime(), rangeStart),
+      Math.min(new Date(entry.end).getTime(), rangeEnd),
+    ] as const)
+    .filter(([start, end]) => end > start)
+    .sort(([startA], [startB]) => startA - startB);
+  if (!ranges.length) return 0;
+
+  let covered = 0;
+  let [currentStart, currentEnd] = ranges[0];
+  for (const [start, end] of ranges.slice(1)) {
+    if (start <= currentEnd) currentEnd = Math.max(currentEnd, end);
+    else {
+      covered += currentEnd - currentStart;
+      currentStart = start;
+      currentEnd = end;
+    }
+  }
+  return (covered + currentEnd - currentStart) / 60_000;
 }
 
 function deriveTargetShares(order: string[], steepness: number): Record<string, number> {

@@ -123,7 +123,7 @@ export default function DriftScreen() {
           <View style={[styles.readingNote, { borderLeftColor: theme.text }]}>
             <ThemedText type="smallBold">How to read this</ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
-              Intended shares come from the ordering and steepness configured on the web. Maintenance is reported separately and never changes coverage or share gaps.
+              Intended shares come from the ordering and steepness configured on the web. Maintenance counts toward coverage, but remains separate from rank movement and share gaps.
             </ThemedText>
           </View>
 

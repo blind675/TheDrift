@@ -27,6 +27,20 @@ const DEMO_ENTRIES: Entry[] = [
 const fmtDuration = (minutes: number) => minutes < 60 ? `${Math.round(minutes)}m` : `${Math.floor(minutes / 60)}h ${Math.round(minutes % 60)}m`;
 const fmtTimerElapsed = (milliseconds: number) => { const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000)); const days = Math.floor(totalSeconds / 86400); const hours = Math.floor(totalSeconds % 86400 / 3600); const minutes = Math.floor(totalSeconds % 3600 / 60); const seconds = totalSeconds % 60; const clock = [hours, minutes, seconds].map(value => String(value).padStart(2, "0")).join(":"); return days ? `${days}d ${clock}` : clock; };
 const minutes = (entry: Entry) => Math.max(0, (new Date(entry.end).getTime() - new Date(entry.start).getTime()) / 60000);
+const coveredMinutes = (entries: Entry[], rangeStart: number, rangeEnd: number) => {
+  const ranges = entries
+    .map(entry => [Math.max(new Date(entry.start).getTime(), rangeStart), Math.min(new Date(entry.end).getTime(), rangeEnd)] as const)
+    .filter(([start, end]) => end > start)
+    .sort(([startA], [startB]) => startA - startB);
+  if (!ranges.length) return 0;
+  let covered = 0;
+  let [currentStart, currentEnd] = ranges[0];
+  for (const [start, end] of ranges.slice(1)) {
+    if (start <= currentEnd) currentEnd = Math.max(currentEnd, end);
+    else { covered += currentEnd - currentStart; currentStart = start; currentEnd = end; }
+  }
+  return (covered + currentEnd - currentStart) / 60000;
+};
 const todayLocal = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); };
 const timeLocal = (offset = 0) => { const d = new Date(Date.now() + offset * 60000); return d.toTimeString().slice(0, 5); };
 const dateTimeLocal = (iso: string) => { const d = new Date(iso); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); };
@@ -143,6 +157,17 @@ function LogScreen({ categories, projects, entries, timer, elapsed, showForm, se
   const [timerSplit, setTimerSplit] = useState(false);
   const [timerWeight, setTimerWeight] = useState(80);
   const [timerCategory, setTimerCategory] = useState("");
+  const [timerCategory2, setTimerCategory2] = useState("");
+  const resetTimerDraft = () => {
+    setTimerCategory("");
+    setTimerCategory2("");
+    setTimerSplit(false);
+    setTimerWeight(80);
+  };
+  const beginTimer = async (label: string, categoryId: string, projectId?: string, category2Id?: string, weight = 1) => {
+    await startTimer(label, categoryId, projectId, category2Id, weight);
+    resetTimerDraft();
+  };
   const recent = [
     ["Project planning", "career"], ["Walk outside", "physical"], ["Reading", "growth"], ["Call family", "family"], ["Dinner together", "romance"],
   ];
@@ -152,11 +177,13 @@ function LogScreen({ categories, projects, entries, timer, elapsed, showForm, se
     const form = new FormData(event.currentTarget);
     const label = String(form.get("timer-label") || "").trim();
     const categoryId = String(form.get("timer-category") || "");
-    const category2Id = timerSplit ? String(form.get("timer-category2") || "") : undefined;
+    const category2Id = timerSplit ? timerCategory2 : undefined;
     const projectId = await getOrCreateProject(String(form.get("timer-project") || ""));
-    if (label && categoryId && category2Id !== categoryId) await startTimer(label, categoryId, projectId, category2Id, timerSplit ? timerWeight / 100 : 1);
+    if (label && categoryId && category2Id !== categoryId) {
+      await beginTimer(label, categoryId, projectId, category2Id, timerSplit ? timerWeight / 100 : 1);
+    }
   };
-  const selectedTimerCategory = categories.some((item: Category) => item.id === timerCategory) ? timerCategory : category("career")?.id || categories[0]?.id || "";
+  const selectedTimerCategory = categories.some((item: Category) => item.id === timerCategory) ? timerCategory : "";
   const secondaryTimerCategories = categories.filter((item: Category) => item.id !== selectedTimerCategory);
   return <section className="screen log-screen">
     <div className="screen-heading"><div><p className="eyebrow">Today · {new Date().toLocaleDateString("en-GB", { month: "long", day: "numeric", timeZone: "Europe/Bucharest" })}</p><h1>Where did your time go?</h1></div><p className="quiet intro">Log what happened. No targets, no verdicts.</p></div>
@@ -164,15 +191,15 @@ function LogScreen({ categories, projects, entries, timer, elapsed, showForm, se
       <div><p className="eyebrow">Start a timer</p><h2>What are you doing now?</h2></div>
       <form className="timer-setup" onSubmit={startConfiguredTimer}>
         <label>Activity title<input name="timer-label" placeholder="e.g. Project planning" required autoComplete="off" /></label>
-        <label>Category<select name="timer-category" value={selectedTimerCategory} onChange={event => setTimerCategory(event.target.value)} required disabled={!categories.length}>{categories.map((item: Category) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+        <label>Category<select name="timer-category" value={selectedTimerCategory} onChange={event => { setTimerCategory(event.target.value); if (event.target.value === timerCategory2) setTimerCategory2(""); }} required disabled={!categories.length}><option value="" disabled>Select category</option>{categories.map((item: Category) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
         <ProjectField projects={projects} name="timer-project" compact />
         <button className="primary-button" type="submit" disabled={!categories.length}><span>▶</span> Start timer</button>
         <button className="timer-split-toggle" type="button" onClick={() => setTimerSplit(!timerSplit)}>{timerSplit ? "− Remove category split" : "＋ Split between two categories"}</button>
-        {timerSplit && <div className="timer-split-box"><label>Second category<select key={selectedTimerCategory} name="timer-category2" required>{secondaryTimerCategories.map((item: Category) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label className="timer-split-range">Split {timerWeight}/{100-timerWeight}<input type="range" min="10" max="90" step="10" value={timerWeight} onChange={event => setTimerWeight(Number(event.target.value))} /></label>{timerWeight === 50 && <small>Even splits often mean one activity rather than two.</small>}</div>}
+        {timerSplit && <div className="timer-split-box"><label>Second category<select name="timer-category2" value={timerCategory2} onChange={event => setTimerCategory2(event.target.value)} required><option value="" disabled>Select category</option>{secondaryTimerCategories.map((item: Category) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label className="timer-split-range">Split {timerWeight}/{100-timerWeight}<input type="range" min="10" max="90" step="10" value={timerWeight} onChange={event => setTimerWeight(Number(event.target.value))} /></label>{timerWeight === 50 && <small>Even splits often mean one activity rather than two.</small>}</div>}
       </form>
     </div>}
     <div className="section-row"><h2>Recent activities</h2><span>Tap to start</span></div>
-    <div className="chips">{recent.map(([label, cat]) => { const resolved = category(cat); return <button key={label} onClick={() => resolved && startTimer(label, resolved.id)} disabled={!resolved}><Dot category={resolved} small />{label}</button>; })}</div>
+    <div className="chips">{recent.map(([label, cat]) => { const resolved = category(cat); return <button key={label} onClick={() => { if (resolved) void beginTimer(label, resolved.id); }} disabled={!resolved}><Dot category={resolved} small />{label}</button>; })}</div>
     <button className="add-block" onClick={() => setShowForm(!showForm)}><span>＋</span><span><strong>Add a finished block</strong><small>Log something that already happened</small></span><b>{showForm ? "−" : "+"}</b></button>
     {showForm && <EntryForm categories={categories} projects={projects} getOrCreateProject={getOrCreateProject} onAdd={addEntry} />}
     <div className="entries-head"><h2>Recent log</h2><button>View all</button></div>
@@ -298,24 +325,23 @@ function DriftScreen({ categories, projects, entries, shares, windowDays, setWin
   visible.forEach((entry: Entry) => { const clippedStart = new Date(Math.max(new Date(entry.start).getTime(), rangeStart)); const clippedEnd = new Date(Math.min(new Date(entry.end).getTime(), rangeEnd) - 1); clippedStart.setHours(0, 0, 0, 0); clippedEnd.setHours(0, 0, 0, 0); while (clippedStart <= clippedEnd) { entryDays.add(clippedStart.toDateString()); clippedStart.setDate(clippedStart.getDate() + 1); } });
   const daysWithEntries = entryDays.size;
   const averagingDays = Math.max(1, daysWithEntries);
-  const pieCategoryIds = new Set(pieCats.map((c: Category) => c.id));
-  const valueEntries = visible.filter((e: Entry) => pieCategoryIds.has(e.category) || Boolean(e.category2 && pieCategoryIds.has(e.category2)));
   const maintenanceId = category("maintenance")?.id;
   const maint = maintenanceId ? totals[maintenanceId] || 0 : 0;
-  const firstValueDay = valueEntries.length ? new Date(Math.min(...valueEntries.map((e: Entry) => new Date(e.start).getTime()))) : todayStart;
-  firstValueDay.setHours(0, 0, 0, 0);
-  const allActivityDays = Math.max(1, Math.round((todayStart.getTime() - firstValueDay.getTime()) / 86400000) + 1);
+  const firstActivityDay = visible.length ? new Date(Math.min(...visible.map((e: Entry) => new Date(e.start).getTime()))) : todayStart;
+  firstActivityDay.setHours(0, 0, 0, 0);
+  const allActivityDays = Math.max(1, Math.round((todayStart.getTime() - firstActivityDay.getTime()) / 86400000) + 1);
   const coverageDays = windowDays === 0 ? 1 : windowDays === 99999 ? allActivityDays : windowDays;
-  const coverage = Math.min(100, Math.round(totalPie / (coverageDays * 720) * 100));
+  const totalLoggedMinutes = coveredMinutes(visible, rangeStart, rangeEnd);
+  const coverage = Math.min(100, Math.round(totalLoggedMinutes / (coverageDays * 1440) * 100));
   const projectTotals: Record<string, number> = {};
   visible.forEach((entry: Entry) => { if (entry.projectId) projectTotals[entry.projectId] = (projectTotals[entry.projectId] || 0) + minutesInRange(entry); });
   const totalProjectMinutes = Object.values(projectTotals).reduce((sum, value) => sum + value, 0);
   const projectRows = projects.map((item: DriftProject) => ({ project: item, minutes: projectTotals[item.id] || 0 })).filter((item: { minutes: number }) => item.minutes > 0).sort((a: { minutes: number }, b: { minutes: number }) => b.minutes - a.minutes);
   const coverageMessage = coverage < 25
-    ? `You have logged ${coverage}% of the 12 discretionary hours available per day. The separate 12-hour Maintenance allocation is excluded. With partial logs, rank movement is more reliable than exact hour comparisons.`
+    ? `You have accounted for ${coverage}% of the full 24 hours per day, including Maintenance. With partial logs, rank movement is more reliable than exact hour comparisons.`
     : coverage < 70
-      ? `You have logged ${coverage}% of the 12 discretionary hours available per day. The separate 12-hour Maintenance allocation is excluded. Share gaps are useful, but some discretionary time is still untracked.`
-      : `You have logged ${coverage}% of the 12 discretionary hours available per day, excluding the separate 12-hour Maintenance allocation, giving this comparison strong coverage.`;
+      ? `You have accounted for ${coverage}% of the full 24 hours per day, including Maintenance. Share gaps are useful, but some time is still untracked.`
+      : `You have accounted for ${coverage}% of the full 24 hours per day, including Maintenance, giving this comparison strong coverage.`;
   return <section className="screen drift-screen"><div className="screen-heading"><div><p className="eyebrow">Intent, meet reality</p><h1>Your drift</h1></div><div className="segmented">{[[0,"Today"],[7,"7 days"],[30,"30 days"],[99999,"All activity"]].map(([n,l]) => <button key={n} className={windowDays === n ? "active" : ""} onClick={() => setWindowDays(n)}>{l}</button>)}</div></div><div className="summary-grid"><div><span>Discretionary logged</span><strong>{(totalPie/60).toFixed(1)}h</strong></div><div><span>Days with entries</span><strong>{daysWithEntries}</strong></div><div><span>Coverage</span><strong>{coverage}%</strong></div><div><span>Maintenance</span><strong>{(maint/60/averagingDays).toFixed(1)}h/day</strong></div></div><p className="coverage-note">{coverageMessage}</p><div className="drift-layout"><div className="panel rank-table"><div className="panel-title"><div><h2>Rank movement</h2><p>The clearest comparison when logging is patchy.</p></div><span>Intent → Actual</span></div>{rows.map(({c,intended,actualRank}: any) => <div className="movement" key={c.id}><Dot category={c}/><strong>{c.name}</strong><span>{intended}</span><i>→</i><span>{actualRank || "—"}</span><b className={!actualRank ? "unlogged" : actualRank < intended ? "up" : actualRank > intended ? "down" : "held"}>{!actualRank ? "Unlogged" : actualRank < intended ? `↑${intended-actualRank}` : actualRank > intended ? `↓${actualRank-intended}` : "Held"}</b></div>)}</div><div className="panel bars"><div className="panel-title"><div><h2>Share gaps</h2><p>Actual share against intended marker.</p></div><div className="legend"><span className="fill-key"/>Actual <span className="mark-key"/>Intent</div></div>{rows.map(({c,gap,hours}: any) => <div className="bar-row" key={c.id}><strong>{c.name}</strong><div className="bar-track"><span className="bar-fill" style={{width:`${Math.min(100, actual[c.id]*300)}%`,background:c.color}}/><i style={{left:`${Math.min(100,(shares[c.id]||0)*300)}%`}}/></div><b className={gap >= 0 ? "positive" : "negative"}>{gap >= 0 ? "+" : ""}{Math.round(gap*100)}pp <span>· {hours.toFixed(1)}h</span></b></div>)}</div></div><div className="panel project-stats"><div className="panel-title"><div><h2>Project time</h2><p>Hours by project for the selected period.</p></div><span>{(totalProjectMinutes / 60).toFixed(1)}h assigned</span></div>{projectRows.length ? projectRows.map(({project,minutes: projectMinutes}: { project: DriftProject; minutes: number }) => <div className="project-stat-row" key={project.id}><strong>{project.name}</strong><div className="project-stat-track"><span style={{width:`${totalProjectMinutes ? projectMinutes / totalProjectMinutes * 100 : 0}%`}}/></div><b>{(projectMinutes / 60).toFixed(1)}h</b><small>{totalProjectMinutes ? Math.round(projectMinutes / totalProjectMinutes * 100) : 0}%</small></div>) : <p className="empty-projects">No project time logged in this period yet.</p>}</div><div className="caveat"><strong>How to read this</strong><p>Intended shares come from your ordering and steepness dial, so moving the dial changes every gap. Treat gaps as direction and rough magnitude; use rank movement for anything sharper.</p></div></section>;
 }
 
